@@ -1,5 +1,6 @@
 """Hauptfenster der Audio-Transkriptions-App."""
 
+
 from __future__ import annotations
 
 import threading
@@ -41,9 +42,13 @@ class AudioTranscriptionApp(ctk.CTk):
         self.enhanced_audio: np.ndarray | None = None
         self.transcript_text = ""
         self.enhancement_steps: list[str] = []
+
         self._worker: threading.Thread | None = None
-        self._input_devices = []
-        self._loopback_devices = []
+        self._input_devices: list = []
+        self._loopback_devices: list = []
+        self._source_audio_path: Path | None = None
+
+
 
         self.player.set_callbacks(
             on_position_change=self._on_player_position,
@@ -82,6 +87,7 @@ class AudioTranscriptionApp(ctk.CTk):
 
         model_label, self.model_menu = labeled_option_menu(
             settings_frame,
+
             "Whisper-Modell:",
             values=list(WhisperTranscriber.MODEL_SIZES),
             default="small",
@@ -91,6 +97,7 @@ class AudioTranscriptionApp(ctk.CTk):
         self.model_menu.grid(row=0, column=3, padx=12, pady=10, sticky="ew")
 
         lang_label, self.language_menu = labeled_option_menu(
+
             settings_frame,
             "Sprache:",
             values=["de", "en", "auto"],
@@ -100,13 +107,43 @@ class AudioTranscriptionApp(ctk.CTk):
         lang_label.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="w")
         self.language_menu.grid(row=1, column=1, padx=12, pady=(0, 8), sticky="w")
 
+        execution_label, self.execution_menu = labeled_option_menu(
+            settings_frame,
+            "Rechenmodus:",
+            values=WhisperTranscriber.available_execution_modes(),
+            default="auto",
+            width=160,
+        )
+        execution_label.grid(row=1, column=2, padx=12, pady=(0, 8), sticky="w")
+
+        self.execution_menu.grid(row=1, column=3, padx=12, pady=(0, 8), sticky="w")
+
+        self.chk_speaker_diarization = labeled_checkbox(
+            settings_frame,
+            "Sprecher unterscheiden",
+            default=False,
+        )
+        self.chk_speaker_diarization.grid(row=2, column=2, padx=12, pady=4, sticky="w")
+
+        speaker_count_label, self.speaker_count_menu = labeled_option_menu(
+            settings_frame,
+            "Max. Sprecher:",
+            values=["2", "3", "4", "5", "6"],
+            default="2",
+            width=160,
+        )
+        speaker_count_label.grid(row=3, column=2, padx=12, pady=(0, 12), sticky="w")
+        self.speaker_count_menu.grid(row=3, column=3, padx=12, pady=(0, 12), sticky="w")
+
         self.chk_system_audio = labeled_checkbox(
+
             settings_frame,
             "System-Audio mitschneiden (Teams, Browser, …)",
             default=False,
         )
         self.chk_system_audio.grid(row=2, column=0, columnspan=2, padx=12, pady=4, sticky="w")
         self.chk_system_audio.configure(command=self._toggle_system_audio)
+
 
         loopback_label, self.loopback_menu = labeled_option_menu(
             settings_frame,
@@ -164,6 +201,7 @@ class AudioTranscriptionApp(ctk.CTk):
         action_frame.grid(row=3, column=0, padx=20, pady=10, sticky="ew")
 
         self.record_button = ctk.CTkButton(
+
             action_frame,
             text="Aufnahme starten",
             command=self._toggle_recording,
@@ -173,12 +211,30 @@ class AudioTranscriptionApp(ctk.CTk):
         )
         self.record_button.pack(side="left", padx=12, pady=12)
 
+        self.pause_record_button = ctk.CTkButton(
+            action_frame,
+            text="Pause",
+            command=self._toggle_recording_pause,
+            width=110,
+            state="disabled",
+        )
+        self.pause_record_button.pack(side="left", padx=12, pady=12)
+
+        self.load_button = ctk.CTkButton(
+            action_frame,
+            text="Aufnahme laden",
+            command=self._load_audio_file,
+            width=150,
+        )
+        self.load_button.pack(side="left", padx=12, pady=12)
+
         self.transcribe_button = ctk.CTkButton(
             action_frame,
             text="Transkribieren",
             command=self._start_transcription,
             width=150,
         )
+
         self.transcribe_button.pack(side="left", padx=12, pady=12)
 
         self.status_label = ctk.CTkLabel(action_frame, text="Status: Bereit")
@@ -371,6 +427,13 @@ class AudioTranscriptionApp(ctk.CTk):
         self.rewind_button.configure(state=state)
         self.forward_button.configure(state=state)
         self.stop_button.configure(state=state)
+        self.load_button.configure(state=state)
+        if busy:
+            self.pause_record_button.configure(state="disabled")
+        elif self.recorder.is_recording:
+            self.pause_record_button.configure(state="normal")
+        else:
+            self.pause_record_button.configure(state="disabled")
 
     def _toggle_recording(self) -> None:
         if self.recorder.is_recording:
@@ -379,6 +442,8 @@ class AudioTranscriptionApp(ctk.CTk):
             self.enhancement_steps = []
             self.enhance_info.configure(text="Noch keine Verbesserung angewendet.")
             self.record_button.configure(text="Aufnahme starten", fg_color="#c0392b")
+            self.pause_record_button.configure(text="Pause", state="disabled")
+            self.load_button.configure(state="normal")
             duration = len(self.raw_audio) / SAMPLE_RATE if self.raw_audio.size else 0
             self._set_status(f"Aufnahme beendet ({duration:.1f} s)")
             self.progress.set(0)
@@ -413,16 +478,86 @@ class AudioTranscriptionApp(ctk.CTk):
         self.raw_audio = np.array([], dtype=np.float32)
         self.enhanced_audio = None
         self.transcript_text = ""
+        self.enhancement_steps = []
+        self._source_audio_path = None
+        self.enhance_info.configure(text="Noch keine Verbesserung angewendet.")
         self.textbox.delete("1.0", "end")
         self.waveform.clear()
         self.record_button.configure(text="Aufnahme stoppen", fg_color="#27ae60")
+        self.pause_record_button.configure(text="Pause", state="normal")
+        self.load_button.configure(state="disabled")
         mode = "Mikrofon + System" if include_system else "Mikrofon"
         self._set_status(f"Aufnahme läuft ({mode})...")
 
-    def _enhance_audio(self) -> None:
-        if self.raw_audio.size == 0:
-            messagebox.showwarning("Hinweis", "Bitte zuerst eine Aufnahme erstellen.")
+    def _toggle_recording_pause(self) -> None:
+        if not self.recorder.is_recording:
             return
+
+        if self.recorder.is_paused:
+            self.recorder.resume()
+            self.pause_record_button.configure(text="Pause")
+            mode = "Mikrofon + System" if bool(self.chk_system_audio.get()) else "Mikrofon"
+            self._set_status(f"Aufnahme läuft ({mode})...")
+            return
+
+        self.recorder.pause()
+        self.pause_record_button.configure(text="Fortsetzen")
+        self._set_status("Aufnahme pausiert")
+
+    def _load_audio_file(self) -> None:
+        if self.recorder.is_recording:
+            messagebox.showwarning("Hinweis", "Bitte die laufende Aufnahme zuerst stoppen.")
+            return
+
+        path = filedialog.askopenfilename(
+            title="Audiodatei auswählen",
+            filetypes=[
+                ("Audiodateien", "*.wav *.flac *.ogg *.mp3 *.m4a *.aac *.wma"),
+                ("Alle Dateien", "*.*"),
+            ],
+        )
+        if not path:
+            return
+
+        try:
+            audio = AudioRecorder.load_audio_file(path, target_sample_rate=SAMPLE_RATE)
+        except Exception as exc:
+            messagebox.showerror("Ladefehler", f"Datei konnte nicht geladen werden:\n{exc}")
+            return
+
+        if audio.size == 0:
+            messagebox.showwarning(
+                "Hinweis",
+                "Die gewählte Audiodatei enthält keine verwertbaren Audiodaten.",
+            )
+            return
+
+        self.player.stop()
+        self.raw_audio = audio
+        self.enhanced_audio = None
+        self.transcript_text = ""
+        self.enhancement_steps = []
+        self._source_audio_path = Path(path)
+        self.enhance_info.configure(text="Noch keine Verbesserung angewendet.")
+        self.textbox.delete("1.0", "end")
+        self.progress.set(0)
+        self.preview_source_menu.set("Aufnahme")
+        self.record_button.configure(text="Aufnahme starten", fg_color="#c0392b")
+        self.pause_record_button.configure(text="Pause", state="disabled")
+        self._reload_player()
+
+        duration = len(self.raw_audio) / SAMPLE_RATE if self.raw_audio.size else 0
+        self._set_status(f"Datei geladen: {Path(path).name} ({duration:.1f} s)")
+
+    def _enhance_audio(self) -> None:
+        if self.recorder.is_recording:
+            messagebox.showwarning("Hinweis", "Bitte die laufende Aufnahme zuerst stoppen.")
+            return
+
+        if self.raw_audio.size == 0:
+            messagebox.showwarning("Hinweis", "Bitte zuerst eine Aufnahme erstellen oder laden.")
+            return
+
 
         options = self._enhancement_options()
         if not any((options.normalize, options.high_pass, options.noise_reduce)):
@@ -440,9 +575,12 @@ class AudioTranscriptionApp(ctk.CTk):
             try:
                 result = self.processor.enhance(self.raw_audio, options)
             except Exception as exc:
-                self.after(0, lambda: self._on_enhance_error(str(exc)))
+                error_message = str(exc)
+                self.after(0, lambda message=error_message: self._on_enhance_error(message))
                 return
+
             self.after(0, lambda: self._on_enhance_done(result.audio, result.applied_steps))
+
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -484,9 +622,14 @@ class AudioTranscriptionApp(ctk.CTk):
         return self.raw_audio
 
     def _start_transcription(self) -> None:
-        if self.raw_audio.size == 0:
-            messagebox.showwarning("Hinweis", "Bitte zuerst eine Aufnahme erstellen.")
+        if self.recorder.is_recording:
+            messagebox.showwarning("Hinweis", "Bitte die laufende Aufnahme zuerst stoppen.")
             return
+
+        if self.raw_audio.size == 0:
+            messagebox.showwarning("Hinweis", "Bitte zuerst eine Aufnahme erstellen oder laden.")
+            return
+
 
         if self._worker and self._worker.is_alive():
             return
@@ -503,18 +646,26 @@ class AudioTranscriptionApp(ctk.CTk):
                     sample_rate=SAMPLE_RATE,
                     model_size=self.model_menu.get(),
                     language=self.language_menu.get(),
+                    execution_mode=self.execution_menu.get(),
+                    speaker_diarization=bool(self.chk_speaker_diarization.get()),
+                    max_speakers=int(self.speaker_count_menu.get()),
                     on_progress=lambda msg: self.after(0, lambda: self._set_status(msg)),
                 )
             except Exception as exc:
-                self.after(0, lambda: self._on_transcribe_error(str(exc)))
+                error_message = str(exc)
+                self.after(0, lambda message=error_message: self._on_transcribe_error(message))
                 return
+
             self.after(0, lambda: self._on_transcribe_done(result.text))
 
         self._worker = threading.Thread(target=work, daemon=True)
         self._worker.start()
 
+
+
     def _on_transcribe_done(self, text: str) -> None:
         self.transcript_text = text
+
         self.textbox.delete("1.0", "end")
         self.textbox.insert("1.0", text)
         self.progress.set(1.0)
@@ -572,9 +723,11 @@ class AudioTranscriptionApp(ctk.CTk):
     def _on_player_position(self, position: float, duration: float) -> None:
         self.after(0, lambda: self.waveform.set_position(position, duration))
 
+        
     def _on_player_finished(self) -> None:
         self.after(0, lambda: self.play_pause_button.configure(text="Abspielen"))
         self.after(0, lambda: self._set_status("Wiedergabe beendet"))
+
 
     def _save_raw_recording(self) -> None:
         if self.raw_audio.size == 0:
@@ -655,10 +808,26 @@ class AudioTranscriptionApp(ctk.CTk):
             "Mikrofon": self.device_menu.get(),
             "Whisper-Modell": self.model_menu.get(),
             "Sprache": self.language_menu.get(),
+            "Rechenmodus": self.execution_menu.get(),
             "Dauer (s)": f"{len(self.raw_audio) / SAMPLE_RATE:.1f}",
         }
+
+        if self._source_audio_path is not None:
+            metadata["Quelldatei"] = str(self._source_audio_path)
         if bool(self.chk_system_audio.get()):
             metadata["System-Audio"] = self.loopback_menu.get()
+        if bool(self.chk_speaker_diarization.get()):
+            metadata["Sprecher-Unterscheidung"] = (
+                f"Aktiv (max. {self.speaker_count_menu.get()} Sprecher)"
+            )
         if self.enhancement_steps:
             metadata["Audio-Verbesserung"] = ", ".join(self.enhancement_steps)
         return metadata
+
+
+
+
+
+
+
+

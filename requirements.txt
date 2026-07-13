@@ -1,0 +1,10 @@
+customtkinter
+
+numpy
+sounddevice
+soundcard
+soundfile
+scipy
+noisereduce
+faster-whisper
+python-docx
