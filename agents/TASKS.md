@@ -5,7 +5,9 @@
 - Task 1 ist abgeschlossen: `app/gui.py` wurde analysiert und die großen Verantwortlichkeiten sind markiert.
 - Task 2 ist abgeschlossen: Busy-/State-Handling ist zentralisiert.
 - Die aktuelle Testsuite und der GUI-Smoke-Test laufen erfolgreich.
-- Nächster Fokus: Task 3, also die weitere Aufteilung von Recording-, Transcription- und UI-Update-Logik.
+- Task 3 ist abgeschlossen: Recording-, Transcription- und UI-Update-Logik sind in Hilfsmethoden zerlegt.
+- Nächster Fokus: Speaker-Control-Logik, Sprecher-UX und Diarisierungsbewertung.
+
 
 ## Nächster Sprint: GUI stabilisieren und modularisieren
 
@@ -19,7 +21,8 @@ Die GUI soll in klarere, testbare Einheiten zerlegt werden, ohne die bestehende 
 
 - [x] Busy-/State-Handling zentralisieren und aus dem Hauptfluss trennen.
 
-- [ ] Recording-, Transcription- und UI-Update-Logik in kleinere Hilfsmethoden aufteilen.
+- [x] Recording-, Transcription- und UI-Update-Logik in kleinere Hilfsmethoden aufteilen.
+
 - [ ] Speaker-Control-Logik sauber von der restlichen GUI-Logik abgrenzen.
 - [ ] Konzeption für Sprecherbearbeitung im UI festlegen:
   - [ ] Anzeige
@@ -57,6 +60,8 @@ Die GUI soll in klarere, testbare Einheiten zerlegt werden, ohne die bestehende 
 
 - GUI-Analyse abgeschlossen: `app/gui.py` bündelt aktuell Initialisierung, UI-Aufbau, Aufnahme, Transkription, Wiedergabe, Speicherlogik und Zustandsteuerung.
 - Busy-/State-Handling ist jetzt teilweise zentralisiert über `_set_busy(...)`, `_sync_recording_controls(...)` und `_set_widgets_state(...)`.
+- Recording-, Transcription- und Lade-Workflows sind in kleinere Hilfsmethoden aufgeteilt.
+
 
 - Einstiegspunkt vorhanden: `main.py` startet die GUI.
 
@@ -75,6 +80,7 @@ Die GUI soll in klarere, testbare Einheiten zerlegt werden, ohne die bestehende 
 ## Statuskorrektur 2026-07-16
 
 - `tests/test_gui_smoke.py` ist vorhanden und die Testsuite laeuft mit 4 bestandenen Tests.
-- Task 2 kann weiterhin als erledigt betrachtet werden; die naechste Arbeit liegt bei der weiteren Modularisierung der GUI.
+- Task 2 und Task 3 können als erledigt betrachtet werden; die naechste Arbeit liegt bei Speaker-Control, Sprecher-UX und Diarisierungsbewertung.
+
 
 

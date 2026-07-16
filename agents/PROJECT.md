@@ -255,8 +255,10 @@ Es gibt keine externe HTTP-API.
 - Es existieren Unit-Tests für die Sprecherlogik und ein GUI-Smoke-Test für die Modulimporte.
 - Die Repository-Hygiene ist aufgeräumt: generierte Bytecode-Caches sind aus dem Git-Index entfernt und werden künftig ignoriert.
 - Build-/Runtime-Artefakte bleiben ueber `.gitignore` aus der Versionierung heraus.
-- Die GUI-Zustandssteuerung ist teilweise zentralisiert; weitere Aufteilung von Workflow- und UI-Logik ist als nächster Schritt vorgesehen.
+- Die GUI-Zustandssteuerung ist teilweise zentralisiert; Recording-, Transcription- und Lade-Workflows sind bereits in Hilfsmethoden zerlegt.
+- Weitere Aufteilung von Speaker-Control- und Sprecherbearbeitungslogik ist als nächster Schritt vorgesehen.
 - Die aktuelle Testsuite umfasst 4 Tests und läuft erfolgreich.
+
 
 ## Statuskorrektur 2026-07-16
 

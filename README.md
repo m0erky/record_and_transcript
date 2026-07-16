@@ -25,8 +25,9 @@ Windows-Desktop-App zum Aufnehmen, Verbessern und Transkribieren von Sprache mit
 ## Aktueller Stand
 
 - Die App ist als lokale Windows-Desktop-Anwendung mit Whisper-Transkription, optionaler Sprecher-Unterscheidung und dateibasiertem Speichern aufgebaut.
-- Die GUI-Zustandslogik wurde bereits teilweise zentralisiert; weitere Modularisierung ist als nächster Entwicklungsschritt vorgesehen.
+- Die GUI-Zustandslogik wurde bereits teilweise zentralisiert; Recording-, Transcription- und Lade-Workflows sind in Hilfsmethoden aufgeteilt.
 - Ein GUI-Smoke-Test ist vorhanden, und die aktuelle Testsuite läuft erfolgreich.
+
 
 ## Voraussetzungen
 

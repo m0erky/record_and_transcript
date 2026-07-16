@@ -7,6 +7,8 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox
+from typing import Callable
+
 
 import customtkinter as ctk
 import numpy as np
@@ -432,8 +434,6 @@ class AudioTranscriptionApp(ctk.CTk):
         )
 
     def _set_status(self, message: str) -> None:
-
-
         self.status_label.configure(text=f"Status: {message}")
 
     def _set_widgets_state(self, widgets: list, state: str) -> None:
@@ -441,7 +441,6 @@ class AudioTranscriptionApp(ctk.CTk):
             widget.configure(state=state)
 
     def _sync_recording_controls(self) -> None:
-
         if self.recorder.is_recording:
             self.record_button.configure(text="Aufnahme stoppen", fg_color="#27ae60")
             self.pause_record_button.configure(
@@ -454,7 +453,64 @@ class AudioTranscriptionApp(ctk.CTk):
             self.pause_record_button.configure(text="Pause", state="disabled")
             self.load_button.configure(state="normal")
 
+        
+    def _clear_audio_workflow_state(self, *, reset_preview_source: bool = True) -> None:
+
+
+
+        self.enhanced_audio = None
+        self.transcript_text = ""
+        self.enhancement_steps = []
+        self._source_audio_path = None
+        self.enhance_info.configure(text="Noch keine Verbesserung angewendet.")
+        self.textbox.delete("1.0", "end")
+        self.progress.set(0)
+        if reset_preview_source:
+            self.preview_source_menu.set("Aufnahme")
+
+    def _start_worker(self, work: Callable[[], None]) -> None:
+        self._worker = threading.Thread(target=work, daemon=True)
+        self._worker.start()
+
+    def _recording_mode_text(self, include_system: bool) -> str:
+        return "Mikrofon + System" if include_system else "Mikrofon"
+
+    def _transcription_settings(self) -> tuple[bool, int]:
+        speaker_diarization = bool(self.chk_speaker_diarization.get())
+        max_speakers = int(self.speaker_count_menu.get()) if speaker_diarization else 1
+        return speaker_diarization, max_speakers
+
+    def _finalize_recording(self) -> None:
+        self.raw_audio = self.recorder.stop()
+        self._clear_audio_workflow_state()
+        self._sync_recording_controls()
+        duration = len(self.raw_audio) / SAMPLE_RATE if self.raw_audio.size else 0
+        self._set_status(f"Aufnahme beendet ({duration:.1f} s)")
+        self._reload_player()
+
+    def _prepare_recording_session(self, include_system: bool) -> None:
+        self.raw_audio = np.array([], dtype=np.float32)
+        self._clear_audio_workflow_state()
+        self.waveform.clear()
+        self._sync_recording_controls()
+        self._set_status(f"Aufnahme läuft ({self._recording_mode_text(include_system)})...")
+
+    def _apply_loaded_audio(self, audio: np.ndarray, source_path: Path) -> None:
+        self.player.stop()
+        self.raw_audio = audio
+        self._clear_audio_workflow_state()
+        self._source_audio_path = source_path
+        self._sync_recording_controls()
+        self._reload_player()
+
+
+
     def _set_busy(self, busy: bool) -> None:
+
+
+
+
+
         state = "disabled" if busy else "normal"
         self._set_widgets_state(
             [
@@ -492,22 +548,12 @@ class AudioTranscriptionApp(ctk.CTk):
 
     def _toggle_recording(self) -> None:
 
-        if self.recorder.is_recording:
 
-            self.raw_audio = self.recorder.stop()
-            self.enhanced_audio = None
-            self.enhancement_steps = []
-            self.enhance_info.configure(text="Noch keine Verbesserung angewendet.")
-            self._sync_recording_controls()
-            duration = len(self.raw_audio) / SAMPLE_RATE if self.raw_audio.size else 0
-            self._set_status(f"Aufnahme beendet ({duration:.1f} s)")
-            self.progress.set(0)
-            self.preview_source_menu.set("Aufnahme")
-            self._reload_player()
+        if self.recorder.is_recording:
+            self._finalize_recording()
             return
 
         device_index = self._selected_device_index()
-
         if device_index is None:
             messagebox.showerror("Fehler", "Kein Mikrofon ausgewählt.")
             return
@@ -531,31 +577,24 @@ class AudioTranscriptionApp(ctk.CTk):
             messagebox.showerror("Aufnahmefehler", str(exc))
             return
 
-        self.raw_audio = np.array([], dtype=np.float32)
+        self._prepare_recording_session(include_system)
 
-        self.enhanced_audio = None
-        self.transcript_text = ""
-        self.enhancement_steps = []
-        self._source_audio_path = None
-        self.enhance_info.configure(text="Noch keine Verbesserung angewendet.")
-        self.textbox.delete("1.0", "end")
-        self.waveform.clear()
-        self._sync_recording_controls()
-        mode = "Mikrofon + System" if include_system else "Mikrofon"
-        self._set_status(f"Aufnahme läuft ({mode})...")
 
 
     def _toggle_recording_pause(self) -> None:
+
+
+
 
         if not self.recorder.is_recording:
             return
 
         if self.recorder.is_paused:
-
             self.recorder.resume()
             self._sync_recording_controls()
-            mode = "Mikrofon + System" if bool(self.chk_system_audio.get()) else "Mikrofon"
-            self._set_status(f"Aufnahme läuft ({mode})...")
+            self._set_status(
+                f"Aufnahme läuft ({self._recording_mode_text(bool(self.chk_system_audio.get()))})..."
+            )
             return
 
         self.recorder.pause()
@@ -563,7 +602,12 @@ class AudioTranscriptionApp(ctk.CTk):
         self._set_status("Aufnahme pausiert")
 
 
+
     def _load_audio_file(self) -> None:
+
+
+
+
         if self.recorder.is_recording:
             messagebox.showwarning("Hinweis", "Bitte die laufende Aufnahme zuerst stoppen.")
             return
@@ -591,26 +635,16 @@ class AudioTranscriptionApp(ctk.CTk):
             )
             return
 
-        self.player.stop()
-        self.raw_audio = audio
-
-
-        self.enhanced_audio = None
-        self.transcript_text = ""
-        self.enhancement_steps = []
-        self._source_audio_path = Path(path)
-        self.enhance_info.configure(text="Noch keine Verbesserung angewendet.")
-        self.textbox.delete("1.0", "end")
-        self.progress.set(0)
-        self.preview_source_menu.set("Aufnahme")
-        self._sync_recording_controls()
-        self._reload_player()
-
-
+        self._apply_loaded_audio(audio, Path(path))
         duration = len(self.raw_audio) / SAMPLE_RATE if self.raw_audio.size else 0
         self._set_status(f"Datei geladen: {Path(path).name} ({duration:.1f} s)")
 
+
     def _enhance_audio(self) -> None:
+
+
+
+
         if self.recorder.is_recording:
             messagebox.showwarning("Hinweis", "Bitte die laufende Aufnahme zuerst stoppen.")
             return
@@ -618,7 +652,6 @@ class AudioTranscriptionApp(ctk.CTk):
         if self.raw_audio.size == 0:
             messagebox.showwarning("Hinweis", "Bitte zuerst eine Aufnahme erstellen oder laden.")
             return
-
 
         options = self._enhancement_options()
         if not any((options.normalize, options.high_pass, options.noise_reduce)):
@@ -642,8 +675,8 @@ class AudioTranscriptionApp(ctk.CTk):
 
             self.after(0, lambda: self._on_enhance_done(result.audio, result.applied_steps))
 
+        self._start_worker(work)
 
-        threading.Thread(target=work, daemon=True).start()
 
     def _on_enhance_done(self, audio: np.ndarray, steps: list[str]) -> None:
         self.enhanced_audio = audio
@@ -688,6 +721,10 @@ class AudioTranscriptionApp(ctk.CTk):
         return self.raw_audio
 
     def _start_transcription(self) -> None:
+
+
+
+
         if self.recorder.is_recording:
             messagebox.showwarning("Hinweis", "Bitte die laufende Aufnahme zuerst stoppen.")
             return
@@ -699,8 +736,7 @@ class AudioTranscriptionApp(ctk.CTk):
         if self._worker and self._worker.is_alive():
             return
 
-        speaker_diarization = bool(self.chk_speaker_diarization.get())
-        max_speakers = int(self.speaker_count_menu.get()) if speaker_diarization else 1
+        speaker_diarization, max_speakers = self._transcription_settings()
 
         self._set_busy(True)
         self.progress.set(0.1)
@@ -726,8 +762,8 @@ class AudioTranscriptionApp(ctk.CTk):
 
             self.after(0, lambda: self._on_transcribe_done(result.text))
 
-        self._worker = threading.Thread(target=work, daemon=True)
-        self._worker.start()
+        self._start_worker(work)
+
 
     def _on_transcribe_done(self, text: str) -> None:
         self._worker = None

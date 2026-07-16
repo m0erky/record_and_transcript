@@ -4,7 +4,14 @@
 
 - Die wichtigsten Projekt-MD-Dateien wurden an den aktuellen Stand angepasst: `README.md`, `PROJECT.md`, `TASKS.md` und dieses Changelog.
 - Der Projektstatus ist jetzt konsistent dokumentiert: GUI-Analyse, zentralisiertes Busy-/State-Handling, GUI-Smoke-Test und erfolgreiche Testsuite.
-- Der nächste offene Schritt ist die weitere Modularisierung der GUI-Workflows.
+- Der nächste offene Schritt ist die Speaker-Control- und Sprecher-UX-Arbeit.
+
+## 2026-07-16 Task-3-Refactor
+
+- Recording-, Transcription- und UI-Update-Logik in `app/gui.py` wurde in kleinere Hilfsmethoden aufgeteilt.
+- Wiederverwendbare Helfer kapseln jetzt das Zurücksetzen des Audio-Workflows, das Starten von Hintergrund-Workern und die Vorbereitung von Aufnahme-/Ladezuständen.
+- Die GUI bleibt funktional, ist aber im Hauptfluss besser zerlegt.
+
 
 ## 2026-07-16 State-Refactor
 
