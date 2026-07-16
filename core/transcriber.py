@@ -12,6 +12,14 @@ from scipy.fftpack import dct
 from scipy.signal import spectrogram
 from scipy.spatial.distance import pdist, squareform
 
+
+@dataclass
+class SpeechRegion:
+    start: float
+    end: float
+    speaker_label: int | None = None
+
+
 try:
     import ctranslate2
 except ImportError:
@@ -83,18 +91,40 @@ class WhisperTranscriber:
 
         if on_progress:
             on_progress(
-                f"Transkription läuft ({resolved_device.upper()}, {resolved_compute_type})..."
+                f"Transkription l?uft ({resolved_device.upper()}, {resolved_compute_type})..."
             )
 
-        segments, info = self._model.transcribe(
+        whisper_segments, info = self._model.transcribe(
             audio,
             language=None if language == "auto" else language,
             beam_size=5,
             vad_filter=True,
         )
 
+        transcript_segments = self._collect_transcript_segments(whisper_segments)
+        if speaker_diarization and transcript_segments:
+            if on_progress:
+                on_progress("Sprecher werden unterschieden...")
+            transcript_segments = self._apply_speaker_diarization(
+                audio=audio,
+                sample_rate=sample_rate,
+                segments=transcript_segments,
+                max_speakers=max_speakers,
+            )
+
+        full_text = self._compose_transcript_text(transcript_segments)
+        duration = len(audio) / sample_rate
+
+        return TranscriptionResult(
+            text=full_text,
+            language=info.language or (language or "auto"),
+            duration=duration,
+            segments=transcript_segments,
+        )
+
+    def _collect_transcript_segments(self, whisper_segments) -> list[TranscriptSegment]:
         transcript_segments: list[TranscriptSegment] = []
-        for segment in segments:
+        for segment in whisper_segments:
             text = segment.text.strip()
             if not text:
                 continue
@@ -105,29 +135,15 @@ class WhisperTranscriber:
                     text=text,
                 )
             )
+        return transcript_segments
 
-        if speaker_diarization and transcript_segments:
-            if on_progress:
-                on_progress("Sprecher werden unterschieden...")
-            transcript_segments = self._assign_speakers(
-                audio=audio,
-                sample_rate=sample_rate,
-                segments=transcript_segments,
-                max_speakers=max_speakers,
-            )
-            transcript_segments = self._merge_adjacent_segments(transcript_segments)
-            full_text = self._format_speaker_text(transcript_segments)
-        else:
-            full_text = " ".join(segment.text for segment in transcript_segments).strip()
 
-        duration = len(audio) / sample_rate
-
-        return TranscriptionResult(
-            text=full_text,
-            language=info.language or (language or "auto"),
-            duration=duration,
-            segments=transcript_segments,
-        )
+    def _compose_transcript_text(self, segments: list[TranscriptSegment]) -> str:
+        if not segments:
+            return ""
+        if any(segment.speaker for segment in segments):
+            return self._format_speaker_text(segments)
+        return " ".join(segment.text for segment in segments).strip()
 
     def _assign_speakers(
         self,
@@ -136,18 +152,35 @@ class WhisperTranscriber:
         segments: list[TranscriptSegment],
         max_speakers: int,
     ) -> list[TranscriptSegment]:
-        max_speakers = max(1, min(int(max_speakers), 8))
-        embeddings: list[np.ndarray] = []
-        embedding_indices: list[int] = []
+        return self._apply_speaker_diarization(
+            audio=audio,
+            sample_rate=sample_rate,
+            segments=segments,
+            max_speakers=max_speakers,
+        )
 
-        for index, segment in enumerate(segments):
-            embedding = self._segment_embedding(audio, sample_rate, segment.start, segment.end)
+    def _apply_speaker_diarization(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        segments: list[TranscriptSegment],
+        max_speakers: int,
+    ) -> list[TranscriptSegment]:
+
+
+        max_speakers = max(1, min(int(max_speakers), 8))
+        speech_regions = self._detect_speech_regions(audio, sample_rate)
+
+        region_embeddings: list[np.ndarray] = []
+        valid_regions: list[SpeechRegion] = []
+        for region in speech_regions:
+            embedding = self._segment_embedding(audio, sample_rate, region.start, region.end)
             if embedding is None:
                 continue
-            embeddings.append(embedding)
-            embedding_indices.append(index)
+            region_embeddings.append(embedding)
+            valid_regions.append(region)
 
-        if not embeddings:
+        if not valid_regions:
             return [
                 TranscriptSegment(
                     start=segment.start,
@@ -158,24 +191,20 @@ class WhisperTranscriber:
                 for segment in segments
             ]
 
-        labels = self._cluster_speakers(np.vstack(embeddings), max_speakers=max_speakers)
-        cluster_by_index = {segment_index: int(label) for segment_index, label in zip(embedding_indices, labels)}
-
-        if cluster_by_index:
-            ordered_indices = sorted(cluster_by_index)
-            for index in range(len(segments)):
-                if index in cluster_by_index:
-                    continue
-                nearest_index = min(ordered_indices, key=lambda candidate: abs(candidate - index))
-                cluster_by_index[index] = cluster_by_index[nearest_index]
-
+        labels = self._cluster_speakers(np.vstack(region_embeddings), max_speakers=max_speakers)
         speaker_order: dict[int, int] = {}
+        for region, label in zip(valid_regions, labels):
+            region.speaker_label = int(label)
+            if region.speaker_label not in speaker_order:
+                speaker_order[region.speaker_label] = len(speaker_order) + 1
+
         labeled_segments: list[TranscriptSegment] = []
-        for index, segment in enumerate(segments):
-            cluster_label = cluster_by_index.get(index, 1)
-            if cluster_label not in speaker_order:
-                speaker_order[cluster_label] = len(speaker_order) + 1
-            speaker_number = speaker_order[cluster_label]
+        for segment in segments:
+            label = self._speaker_label_for_segment(segment, valid_regions)
+            speaker_number = speaker_order.get(label)
+            if speaker_number is None:
+                speaker_order[label] = len(speaker_order) + 1
+                speaker_number = speaker_order[label]
             labeled_segments.append(
                 TranscriptSegment(
                     start=segment.start,
@@ -186,6 +215,124 @@ class WhisperTranscriber:
             )
 
         return labeled_segments
+
+    def _detect_speech_regions(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        frame_duration_seconds: float = 0.03,
+        hop_duration_seconds: float = 0.015,
+        min_speech_duration: float = 0.35,
+        min_silence_duration: float = 0.2,
+    ) -> list[SpeechRegion]:
+        mono = np.asarray(audio, dtype=np.float32)
+        if mono.ndim > 1:
+            mono = mono.mean(axis=1)
+        if mono.size == 0:
+            return []
+
+        total_duration = mono.size / sample_rate
+        frame_length = max(1, int(frame_duration_seconds * sample_rate))
+        hop_length = max(1, int(hop_duration_seconds * sample_rate))
+        if mono.size <= frame_length:
+            return [SpeechRegion(0.0, total_duration)]
+
+        rms_values: list[float] = []
+        frame_starts: list[int] = []
+        for start in range(0, mono.size - frame_length + 1, hop_length):
+            frame = mono[start : start + frame_length]
+            rms_values.append(float(np.sqrt(np.mean(frame**2))))
+            frame_starts.append(start)
+
+        if not rms_values:
+            return [SpeechRegion(0.0, total_duration)]
+
+        energy = np.asarray(rms_values, dtype=np.float32)
+        if float(np.max(energy)) <= 1e-6:
+            return [SpeechRegion(0.0, total_duration)]
+
+        threshold = max(
+            1e-4,
+            float(np.percentile(energy, 90)) * 0.25,
+            float(np.percentile(energy, 75)) * 0.55,
+            float(np.median(energy)) * 4.0,
+        )
+        speech_flags = energy > threshold
+
+        if not np.any(speech_flags):
+            return [SpeechRegion(0.0, total_duration)]
+
+        raw_regions: list[SpeechRegion] = []
+        start_frame: int | None = None
+        for index, is_speech in enumerate(speech_flags):
+            if is_speech and start_frame is None:
+                start_frame = index
+            elif not is_speech and start_frame is not None:
+                raw_regions.append(
+                    SpeechRegion(
+                        start=frame_starts[start_frame] / sample_rate,
+                        end=min(total_duration, (frame_starts[index] + frame_length) / sample_rate),
+                    )
+                )
+                start_frame = None
+        if start_frame is not None:
+            raw_regions.append(
+                SpeechRegion(
+                    start=frame_starts[start_frame] / sample_rate,
+                    end=total_duration,
+                )
+            )
+
+        merged_regions: list[SpeechRegion] = []
+        for region in raw_regions:
+            if not merged_regions:
+                merged_regions.append(region)
+                continue
+
+            previous = merged_regions[-1]
+            gap = region.start - previous.end
+            if gap <= min_silence_duration:
+                previous.end = max(previous.end, region.end)
+            else:
+                merged_regions.append(region)
+
+        filtered_regions = [
+            region
+            for region in merged_regions
+            if (region.end - region.start) >= min_speech_duration
+        ]
+        return filtered_regions or [SpeechRegion(0.0, total_duration)]
+
+    def _speaker_label_for_segment(
+        self,
+        segment: TranscriptSegment,
+        regions: list[SpeechRegion],
+    ) -> int:
+        best_label: int | None = None
+        best_overlap = float("-inf")
+        nearest_label = 1
+        nearest_distance = float("inf")
+        segment_midpoint = (segment.start + segment.end) * 0.5
+
+        for region in regions:
+            label = region.speaker_label or 1
+            overlap = min(segment.end, region.end) - max(segment.start, region.start)
+            if overlap > best_overlap:
+                best_overlap = overlap
+                if overlap > 0:
+                    best_label = label
+
+            region_midpoint = (region.start + region.end) * 0.5
+            distance = min(
+                abs(segment.start - region.end),
+                abs(segment.end - region.start),
+                abs(segment_midpoint - region_midpoint),
+            )
+            if distance < nearest_distance:
+                nearest_distance = distance
+                nearest_label = label
+
+        return best_label if best_label is not None else nearest_label
 
     def _segment_embedding(
         self,
@@ -212,6 +359,12 @@ class WhisperTranscriber:
         target_min_length = int(0.6 * sample_rate)
         if chunk.size < target_min_length:
             chunk = np.pad(chunk, (0, target_min_length - chunk.size))
+
+        target_max_length = int(2.5 * sample_rate)
+        if chunk.size > target_max_length:
+            center = chunk.size // 2
+            half_length = target_max_length // 2
+            chunk = chunk[max(0, center - half_length) : min(chunk.size, center + half_length)]
 
         nperseg = min(400, chunk.size)
         if nperseg < 64:
@@ -241,7 +394,7 @@ class WhisperTranscriber:
             effective_end = max(start_bin + 1, end_bin)
             band_energies.append(power[start_bin:effective_end].mean(axis=0))
         bands = np.vstack(band_energies)
-        log_bands = np.log(bands)
+        log_bands = np.log1p(bands)
 
         mfcc_like = dct(log_bands, axis=0, norm="ortho")[:8]
         spectral_centroid = (frequencies[:, None] * power).sum(axis=0) / (power.sum(axis=0) + 1e-8)
@@ -274,7 +427,9 @@ class WhisperTranscriber:
             embedding = embedding / norm
         return embedding
 
+
     def _cluster_speakers(self, embeddings: np.ndarray, max_speakers: int) -> np.ndarray:
+
         segment_count = len(embeddings)
         if segment_count <= 1 or max_speakers <= 1:
             return np.ones(segment_count, dtype=int)
@@ -459,8 +614,10 @@ class WhisperTranscriber:
 
 
 __all__ = [
+    "SpeechRegion",
     "TranscriptSegment",
     "TranscriptionResult",
     "WhisperTranscriber",
 ]
+
 

@@ -123,6 +123,7 @@ class AudioTranscriptionApp(ctk.CTk):
             "Sprecher unterscheiden",
             default=False,
         )
+        self.chk_speaker_diarization.configure(command=self._toggle_speaker_diarization)
         self.chk_speaker_diarization.grid(row=2, column=2, padx=12, pady=4, sticky="w")
 
         speaker_count_label, self.speaker_count_menu = labeled_option_menu(
@@ -132,8 +133,14 @@ class AudioTranscriptionApp(ctk.CTk):
             default="2",
             width=160,
         )
+        self._speaker_count_label = speaker_count_label
         speaker_count_label.grid(row=3, column=2, padx=12, pady=(0, 12), sticky="w")
         self.speaker_count_menu.grid(row=3, column=3, padx=12, pady=(0, 12), sticky="w")
+        self._set_speaker_controls_enabled(False)
+
+
+
+
 
         self.chk_system_audio = labeled_checkbox(
 
@@ -335,7 +342,16 @@ class AudioTranscriptionApp(ctk.CTk):
             text_color=("gray10", "gray90") if enabled else "gray"
         )
 
+    def _set_speaker_controls_enabled(self, enabled: bool) -> None:
+        state = "normal" if enabled else "disabled"
+        self.speaker_count_menu.configure(state=state)
+        self._speaker_count_label.configure(text_color=("gray10", "gray90") if enabled else "gray")
+
+    def _toggle_speaker_diarization(self) -> None:
+        self._set_speaker_controls_enabled(bool(self.chk_speaker_diarization.get()))
+
     def _toggle_system_audio(self) -> None:
+
         enabled = bool(self.chk_system_audio.get())
         self._set_loopback_enabled(enabled)
         if enabled and not self._loopback_devices:
@@ -428,12 +444,23 @@ class AudioTranscriptionApp(ctk.CTk):
         self.forward_button.configure(state=state)
         self.stop_button.configure(state=state)
         self.load_button.configure(state=state)
+        self.chk_speaker_diarization.configure(state=state)
+        self.chk_system_audio.configure(state=state)
+        self.chk_normalize.configure(state=state)
+        self.chk_high_pass.configure(state=state)
+        self.chk_noise_reduce.configure(state=state)
+        self.chk_auto_enhance.configure(state=state)
+
         if busy:
             self.pause_record_button.configure(state="disabled")
+            self._set_speaker_controls_enabled(False)
         elif self.recorder.is_recording:
             self.pause_record_button.configure(state="normal")
+            self._set_speaker_controls_enabled(bool(self.chk_speaker_diarization.get()))
         else:
             self.pause_record_button.configure(state="disabled")
+            self._set_speaker_controls_enabled(bool(self.chk_speaker_diarization.get()))
+
 
     def _toggle_recording(self) -> None:
         if self.recorder.is_recording:
@@ -610,7 +637,12 @@ class AudioTranscriptionApp(ctk.CTk):
         if bool(self.chk_auto_enhance.get()):
             options = self._enhancement_options()
             if any((options.normalize, options.high_pass, options.noise_reduce)):
-                result = self.processor.enhance(self.raw_audio, options)
+                try:
+                    result = self.processor.enhance(self.raw_audio, options)
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Automatische Audio-Verbesserung fehlgeschlagen: {exc}"
+                    ) from exc
                 self.enhanced_audio = result.audio
                 self.enhancement_steps = result.applied_steps
                 self.enhance_info.configure(
@@ -630,9 +662,11 @@ class AudioTranscriptionApp(ctk.CTk):
             messagebox.showwarning("Hinweis", "Bitte zuerst eine Aufnahme erstellen oder laden.")
             return
 
-
         if self._worker and self._worker.is_alive():
             return
+
+        speaker_diarization = bool(self.chk_speaker_diarization.get())
+        max_speakers = int(self.speaker_count_menu.get()) if speaker_diarization else 1
 
         self._set_busy(True)
         self.progress.set(0.1)
@@ -647,8 +681,8 @@ class AudioTranscriptionApp(ctk.CTk):
                     model_size=self.model_menu.get(),
                     language=self.language_menu.get(),
                     execution_mode=self.execution_menu.get(),
-                    speaker_diarization=bool(self.chk_speaker_diarization.get()),
-                    max_speakers=int(self.speaker_count_menu.get()),
+                    speaker_diarization=speaker_diarization,
+                    max_speakers=max_speakers,
                     on_progress=lambda msg: self.after(0, lambda: self._set_status(msg)),
                 )
             except Exception as exc:
@@ -661,9 +695,8 @@ class AudioTranscriptionApp(ctk.CTk):
         self._worker = threading.Thread(target=work, daemon=True)
         self._worker.start()
 
-
-
     def _on_transcribe_done(self, text: str) -> None:
+        self._worker = None
         self.transcript_text = text
 
         self.textbox.delete("1.0", "end")
@@ -673,6 +706,7 @@ class AudioTranscriptionApp(ctk.CTk):
         self._set_status("Transkription abgeschlossen")
 
     def _on_transcribe_error(self, message: str) -> None:
+        self._worker = None
         self.progress.set(0)
         self._set_busy(False)
         self._set_status("Transkriptionsfehler")

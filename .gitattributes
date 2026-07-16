@@ -1,0 +1,17 @@
+* text=auto
+
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.spec text eol=lf
+
+*.wav binary
+*.mp3 binary
+*.m4a binary
+*.flac binary
+*.ogg binary
+*.aac binary
+*.wma binary
+*.docx binary
+*.exe binary
+*.zip binary
