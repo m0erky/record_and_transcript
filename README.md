@@ -26,8 +26,8 @@ Windows-Desktop-App zum Aufnehmen, Verbessern und Transkribieren von Sprache mit
 
 - Die App ist als lokale Windows-Desktop-Anwendung mit Whisper-Transkription, optionaler Sprecher-Unterscheidung und dateibasiertem Speichern aufgebaut.
 - Die GUI-Zustandslogik wurde bereits teilweise zentralisiert; Recording-, Transcription- und Lade-Workflows sind in Hilfsmethoden aufgeteilt.
-- Ein GUI-Smoke-Test ist vorhanden, und die aktuelle Testsuite läuft erfolgreich.
-
+- Die Speaker-Control-Logik ist syntaktisch bereinigt, `compileall` und die Testsuite laufen erfolgreich.
+- Offen bleiben die konzeptionelle Sprecher-UX und die Bewertung der heuristischen Diarisierung.
 
 ## Voraussetzungen
 
@@ -79,8 +79,8 @@ transcript.docx
 ## Entwicklung und Tests
 
 ```powershell
+python -m compileall -q main.py app core tests
 python -m unittest discover -s tests -v
-python -m py_compile app\gui.py
 ```
 
 ## Hinweise

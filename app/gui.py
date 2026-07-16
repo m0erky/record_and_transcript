@@ -331,18 +331,40 @@ class AudioTranscriptionApp(ctk.CTk):
         ).pack(side="left", padx=12, pady=12)
 
         ctk.CTkButton(
+
             save_frame,
             text="Alles speichern",
             command=self._save_all,
             width=150,
         ).pack(side="left", padx=12, pady=12)
 
+
+    
     def _set_loopback_enabled(self, enabled: bool) -> None:
+
+
         state = "normal" if enabled else "disabled"
         self.loopback_menu.configure(state=state)
         self._loopback_label.configure(
             text_color=("gray10", "gray90") if enabled else "gray"
         )
+
+
+    def _speaker_diarization_enabled(self) -> bool:
+        return bool(self.chk_speaker_diarization.get())
+
+    def _speaker_count(self) -> int:
+        return int(self.speaker_count_menu.get())
+
+    def _speaker_settings(self) -> tuple[bool, int]:
+        if not self._speaker_diarization_enabled():
+            return False, 1
+        return True, self._speaker_count()
+
+    def _speaker_metadata(self) -> str | None:
+        if not self._speaker_diarization_enabled():
+            return None
+        return f"Aktiv (max. {self._speaker_count()} Sprecher)"
 
     def _set_speaker_controls_enabled(self, enabled: bool) -> None:
         state = "normal" if enabled else "disabled"
@@ -350,11 +372,11 @@ class AudioTranscriptionApp(ctk.CTk):
         self._speaker_count_label.configure(text_color=("gray10", "gray90") if enabled else "gray")
 
     def _toggle_speaker_diarization(self) -> None:
-        self._set_speaker_controls_enabled(bool(self.chk_speaker_diarization.get()))
+        self._set_speaker_controls_enabled(self._speaker_diarization_enabled())
 
     def _toggle_system_audio(self) -> None:
-
         enabled = bool(self.chk_system_audio.get())
+
         self._set_loopback_enabled(enabled)
         if enabled and not self._loopback_devices:
             messagebox.showwarning(
@@ -476,11 +498,13 @@ class AudioTranscriptionApp(ctk.CTk):
         return "Mikrofon + System" if include_system else "Mikrofon"
 
     def _transcription_settings(self) -> tuple[bool, int]:
-        speaker_diarization = bool(self.chk_speaker_diarization.get())
-        max_speakers = int(self.speaker_count_menu.get()) if speaker_diarization else 1
-        return speaker_diarization, max_speakers
+        return self._speaker_settings()
 
+
+    
     def _finalize_recording(self) -> None:
+
+
         self.raw_audio = self.recorder.stop()
         self._clear_audio_workflow_state()
         self._sync_recording_controls()
@@ -505,11 +529,8 @@ class AudioTranscriptionApp(ctk.CTk):
 
 
 
+    
     def _set_busy(self, busy: bool) -> None:
-
-
-
-
 
         state = "disabled" if busy else "normal"
         self._set_widgets_state(
@@ -539,8 +560,10 @@ class AudioTranscriptionApp(ctk.CTk):
 
         self._sync_recording_controls()
         self._set_speaker_controls_enabled(
-            bool(self.chk_speaker_diarization.get()) and not self.recorder.is_recording
+            self._speaker_diarization_enabled() and not self.recorder.is_recording
         )
+
+
 
 
 
@@ -920,13 +943,15 @@ class AudioTranscriptionApp(ctk.CTk):
             metadata["Quelldatei"] = str(self._source_audio_path)
         if bool(self.chk_system_audio.get()):
             metadata["System-Audio"] = self.loopback_menu.get()
-        if bool(self.chk_speaker_diarization.get()):
-            metadata["Sprecher-Unterscheidung"] = (
-                f"Aktiv (max. {self.speaker_count_menu.get()} Sprecher)"
-            )
+        speaker_metadata = self._speaker_metadata()
+        if speaker_metadata is not None:
+            metadata["Sprecher-Unterscheidung"] = speaker_metadata
+
         if self.enhancement_steps:
             metadata["Audio-Verbesserung"] = ", ".join(self.enhancement_steps)
         return metadata
+
+
 
 
 

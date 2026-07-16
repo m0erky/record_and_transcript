@@ -1,0 +1,32 @@
+Ab jetzt arbeitest du nach AGENT_RULES.md.
+
+Zu Beginn jeder Aufgabe:
+1. Lies PROJECT.md
+2. Lies TASKS.md
+3. Lies CHANGELOG.md
+4. Lies AGENT_RULES.md
+
+Vor jeder Änderung:
+- prüfe die Architektur
+- prüfe bestehende Implementierungen
+
+Nach jeder abgeschlossenen Aufgabe:
+- aktualisiere TASKS.md
+- aktualisiere CHANGELOG.md
+- dokumentiere Architekturänderungen in PROJECT.md
+- bringe nach verifizierten Codeänderungen den sichtbaren Projektstand in README.md, PROJECT.md und TASKS.md auf denselben Stand
+
+Bei größeren Änderungen:
+- dokumentiere Designentscheidungen
+- dokumentiere neue Abhängigkeiten
+- dokumentiere Datenbankänderungen
+
+Wenn mehrere Aufgaben offen sind:
+- arbeite die nächste sinnvolle Aufgabe selbstständig ab
+- aktualisiere die Dokumentation
+- fahre mit der nächsten Aufgabe fort
+
+Bevor Dateien gelöscht oder grundlegend umstrukturiert werden:
+- dokumentiere die Begründung
+
+Der Dokumentationsstand muss jederzeit ausreichen, um die Arbeit in einem komplett neuen Chat fortsetzen zu können.

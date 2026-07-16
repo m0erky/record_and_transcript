@@ -14,6 +14,7 @@
 - `PROJECT.md` aktuell halten, wenn Architektur, Technologien, Abläufe oder technische Entscheidungen sich ändern.
 - `TASKS.md` pflegen, damit offene Punkte, In-Bearbeitung und erledigte Aufgaben sichtbar bleiben.
 - `CHANGELOG.md` nach jeder relevanten Session aktualisieren.
+- Nach Verifikation von Codeänderungen den sichtbaren Projektstand in `README.md`, `PROJECT.md` und `TASKS.md` auf denselben Stand bringen.
 - Technische Schulden, Einschränkungen, Fehlerzustände und Architekturentscheidungen transparent dokumentieren.
 - Wenn ein Problem nicht behoben wird, den aktuellen Status klar festhalten statt ihn zu verschweigen.
 
@@ -42,3 +43,4 @@
 - Dokumentationsänderungen möglichst von funktionalen Änderungen trennen.
 - Build-/Dist-Artefakte nur versionieren, wenn das Projekt es bewusst verlangt.
 - Python-Bytecode-Caches (`__pycache__/`, `*.pyc`) niemals versionieren; falls sie bereits im Index liegen, aus dem Index entfernen.
+

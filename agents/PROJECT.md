@@ -37,8 +37,8 @@ Die Anwendung ist in wenige klar getrennte Schichten gegliedert:
 - Speichern und Exportieren von Aufnahme- und Transkriptartefakten
 - Aktivieren und Deaktivieren von UI-Elementen in Abhängigkeit vom App-Zustand
 
-Die aktuelle GUI-Struktur ist funktional, aber stark verzahnt. Für spätere Refactors bietet sich eine Trennung in Zustandsverwaltung, Aufnahme-/Transkriptions-Workflow und Anzeige-/Callback-Logik an.
-Der erste Schritt zur Zustandsentkopplung ist umgesetzt: `_set_busy(...)` arbeitet mit `_set_widgets_state(...)` und `_sync_recording_controls(...)`, um Busy-State und Aufnahmezustand zu trennen.
+Die aktuelle GUI-Struktur ist funktional, aber weiterhin verzahnt. Für spätere Refactors bietet sich eine Trennung in Zustandsverwaltung, Aufnahme-/Transkriptions-Workflow und Anzeige-/Callback-Logik an.
+Der erste Schritt zur Zustandsentkopplung ist umgesetzt: `_set_busy(...)` arbeitet mit `_set_widgets_state(...)` und `_sync_recording_controls(...)`, um Busy-State und Aufnahmezustand zu trennen. Die Speaker-bezogenen Helfer `_speaker_settings(...)` und `_speaker_metadata(...)` sind ebenfalls zentralisiert.
 
 
 
@@ -256,14 +256,18 @@ Es gibt keine externe HTTP-API.
 - Die Repository-Hygiene ist aufgeräumt: generierte Bytecode-Caches sind aus dem Git-Index entfernt und werden künftig ignoriert.
 - Build-/Runtime-Artefakte bleiben ueber `.gitignore` aus der Versionierung heraus.
 - Die GUI-Zustandssteuerung ist teilweise zentralisiert; Recording-, Transcription- und Lade-Workflows sind bereits in Hilfsmethoden zerlegt.
-- Weitere Aufteilung von Speaker-Control- und Sprecherbearbeitungslogik ist als nächster Schritt vorgesehen.
-- Die aktuelle Testsuite umfasst 4 Tests und läuft erfolgreich.
-
+- Die Speaker-Control-Logik ist syntaktisch bereinigt; die nächste fachliche Aufgabe ist die Konzeption der Sprecher-UX und die Bewertung der heuristischen Diarisierung.
+- `app/gui.py` ist syntaktisch korrekt; `compileall` und die Testsuite laufen erfolgreich.
+- Die aktuelle Testsuite umfasst 4 Tests und wurde im aktuellen Workspace erfolgreich verifiziert.
 
 ## Statuskorrektur 2026-07-16
 
-- Der zuvor dokumentierte `IndentationError` in `app/gui.py` ist im aktuellen Workspace nicht mehr reproduzierbar.
-- `app/gui.py` ist syntaktisch korrekt; `python -m compileall` laeuft fuer Einstiegspunkt, App-, Core- und Testmodule erfolgreich.
+- Der zuvor dokumentierte `IndentationError` in `app/gui.py` ist im aktuellen Workspace behoben.
+- `app/gui.py` ist syntaktisch korrekt; `python -m compileall` und `python -m unittest discover -s record_and_transcript\tests -v` laufen erfolgreich.
 - `tests/test_gui_smoke.py` ist vorhanden und prüft den Import von `app.gui` und `main`, ohne ein GUI-Fenster zu instanziieren.
-- Die Testsuite läuft erfolgreich mit `python -m unittest discover -s record_and_transcript\tests -v`.
+- Der nächste inhaltliche Schritt liegt bei Sprecher-UX und Diarisierungsbewertung.
+
+
+
+
 

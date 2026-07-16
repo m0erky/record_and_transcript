@@ -1,10 +1,27 @@
 # CHANGELOG.md
 
-## 2026-07-16 Dokumentations-Update
+## 2026-07-16 GUI-Syntax-Cleanup
 
-- Die wichtigsten Projekt-MD-Dateien wurden an den aktuellen Stand angepasst: `README.md`, `PROJECT.md`, `TASKS.md` und dieses Changelog.
-- Der Projektstatus ist jetzt konsistent dokumentiert: GUI-Analyse, zentralisiertes Busy-/State-Handling, GUI-Smoke-Test und erfolgreiche Testsuite.
-- Der nächste offene Schritt ist die Speaker-Control- und Sprecher-UX-Arbeit.
+- `app/gui.py` wurde syntaktisch bereinigt und die Speaker-Control-Hilfsmethoden bleiben konsistent eingebettet.
+- `python -m compileall -q record_and_transcript\main.py record_and_transcript\app record_and_transcript\core record_and_transcript\tests` wurde erfolgreich ausgeführt.
+- `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 4 Tests bestanden.
+- Die aktuelle Dokumentation wurde an den verifizierten Stand angepasst.
+
+## 2026-07-16 Dokumentations-Synchronisation
+
+- Die wichtigsten Projekt-MD-Dateien wurden an den verifizierten Stand angepasst: `README.md`, `PROJECT.md`, `TASKS.md` und dieses Changelog.
+- Der Projektstatus ist jetzt konsistent dokumentiert: GUI-Analyse, zentralisiertes Busy-/State-Handling, verifizierter Speaker-Control-Refactor und offene Sprecher-UX.
+- Der nächste offene Schritt ist die konzeptionelle Sprecher-UX und die fachliche Bewertung der heuristischen Diarisierung.
+
+
+
+## 2026-07-16 Speaker-Control-Start
+
+- Die Speaker-Control-Logik wurde als nächste Refactor-Richtung identifiziert und syntaktisch bereinigt.
+- Die Abgrenzung von Speaker-Settings und Sprecher-Metadaten ist umgesetzt.
+- Der nächste inhaltliche Schritt liegt bei Sprecher-UX und Diarisierungsbewertung.
+
+
 
 ## 2026-07-16 Task-3-Refactor
 
@@ -28,18 +45,19 @@
 
 ## 2026-07-16 Sprintplanung
 
+- Die nächste Arbeitsphase ist als Sprint in `TASKS.md` dokumentiert: Sprecher-UX konzipieren und Diarisierung bewerten.
+- Der Sprint fokussiert auf Sprecherbearbeitung im UI, heuristische Diarisierung und Verifikation.
 
-- Die naechste Arbeitsphase ist als Sprint in `TASKS.md` dokumentiert: GUI stabilisieren und modularisieren.
-- Der Sprint fokussiert auf GUI-Struktur, Sprecher-UI, Diarisierungsbewertung und Verifikation.
 
 ## 2026-07-16 Verifikation
 
 - `app/gui.py` ist im aktuellen Workspace syntaktisch korrekt; der zuvor dokumentierte `IndentationError` ist nicht mehr reproduzierbar.
-- `python -m compileall -q record_and_transcript\main.py record_and_transcript\app record_and_transcript\core record_and_transcript\tests` wurde erfolgreich ausgefuehrt.
-- `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgefuehrt: 4 Tests bestanden.
-- `tests/test_gui_smoke.py` ist vorhanden und prueft Modulimporte, ohne ein Fenster zu instanziieren.
+- `python -m compileall -q record_and_transcript\main.py record_and_transcript\app record_and_transcript\core record_and_transcript\tests` wurde erfolgreich ausgeführt.
+- `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 4 Tests bestanden.
+- `tests/test_gui_smoke.py` ist vorhanden und prüft Modulimporte, ohne ein Fenster zu instanziieren.
 - `PROJECT.md`, `TASKS.md`, `README.md` und `CHANGELOG.md` wurden an diesen aktuellen Status angepasst.
-- Die Testsuite wurde nach der Repository-Bereinigung erneut ausgefuehrt und besteht weiterhin aus 4 Tests.
+- Der nächste inhaltliche Schritt ist die Sprecher-UX und die fachliche Bewertung der heuristischen Diarisierung.
+
 
 
 
@@ -91,5 +109,6 @@ Dieses Changelog dokumentiert die bisher erkannten Projektänderungen auf Basis 
 
 - `app/gui.py` ist im aktuellen Workspace syntaktisch korrekt.
 - Die restliche Kernlogik ist im Codebestand vorhanden und teilweise durch Tests abgedeckt.
-- Weiterhin offen sind GUI-Refactor, Sprecherbearbeitung im UI und die Bewertung der heuristischen Sprecher-Diarisierung.
+- Offen sind vor allem die Sprecherbearbeitung im UI und die Bewertung der heuristischen Sprecher-Diarisierung.
+
 
