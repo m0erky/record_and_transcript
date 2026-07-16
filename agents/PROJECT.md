@@ -25,6 +25,23 @@ Die Anwendung ist in wenige klar getrennte Schichten gegliedert:
 - `app/waveform.py` zeichnet die Wellenform und die aktuelle Position.
 - `app/widgets.py` stellt kleine UI-Hilfsfunktionen bereit.
 
+### GUI-Verantwortlichkeiten und Analyse
+`app/gui.py` ist aktuell der zentrale Orchestrator der Anwendung und bündelt mehrere Aufgaben:
+- Initialisierung von Recorder, Player, Processor, Transcriber und Storage
+- Aufbau der gesamten Oberfläche
+- Geräte- und Loopback-Refresh
+- Aufnahme starten, pausieren, stoppen und Datei laden
+- Audio-Verbesserung manuell oder automatisch vor der Transkription
+- Transkriptionsstart, Fortschrittsanzeige und Fehlerbehandlung
+- Wiedergabesteuerung inklusive Waveform-Synchronisation
+- Speichern und Exportieren von Aufnahme- und Transkriptartefakten
+- Aktivieren und Deaktivieren von UI-Elementen in Abhängigkeit vom App-Zustand
+
+Die aktuelle GUI-Struktur ist funktional, aber stark verzahnt. Für spätere Refactors bietet sich eine Trennung in Zustandsverwaltung, Aufnahme-/Transkriptions-Workflow und Anzeige-/Callback-Logik an.
+Der erste Schritt zur Zustandsentkopplung ist umgesetzt: `_set_busy(...)` arbeitet mit `_set_widgets_state(...)` und `_sync_recording_controls(...)`, um Busy-State und Aufnahmezustand zu trennen.
+
+
+
 ### Fachlogik
 - `core/audio_recorder.py` nimmt Mikrofon- und optional System-Audio auf.
 - `core/audio_processor.py` verbessert Audio vor der Transkription.
@@ -34,7 +51,9 @@ Die Anwendung ist in wenige klar getrennte Schichten gegliedert:
 - `core/docx_exporter.py` erzeugt Word-Dokumente.
 
 ### Tests
+- `tests/test_gui_smoke.py` prüft den Import von `app.gui` und `main`, ohne ein GUI-Fenster zu öffnen.
 - `tests/test_transcriber.py` prüft die Transcriber-Logik, Speech-Region-Erkennung und Segment-Merging.
+
 
 ### Build-/Artefaktbereich
 - `build/` und `dist/` enthalten Paketierungsartefakte, vermutlich aus PyInstaller-Builds.
@@ -101,7 +120,9 @@ record_and_transcript/
 │   ├── transcriber.py
 │   └── __init__.py
 ├── tests/
+│   ├── test_gui_smoke.py
 │   └── test_transcriber.py
+
 ├── output/
 │   └── sessions/
 ├── build/
@@ -231,19 +252,16 @@ Es gibt keine externe HTTP-API.
 ## Aktueller technischer Status
 
 - Die Transcriber-Logik ist vorhanden und testbar.
-- Es existieren Unit-Tests für die Sprecherlogik.
+- Es existieren Unit-Tests für die Sprecherlogik und ein GUI-Smoke-Test für die Modulimporte.
 - Die Repository-Hygiene ist aufgeräumt: generierte Bytecode-Caches sind aus dem Git-Index entfernt und werden künftig ignoriert.
 - Build-/Runtime-Artefakte bleiben ueber `.gitignore` aus der Versionierung heraus.
-
+- Die GUI-Zustandssteuerung ist teilweise zentralisiert; weitere Aufteilung von Workflow- und UI-Logik ist als nächster Schritt vorgesehen.
+- Die aktuelle Testsuite umfasst 4 Tests und läuft erfolgreich.
 
 ## Statuskorrektur 2026-07-16
 
-- Der oben dokumentierte `IndentationError` in `app/gui.py` ist im aktuellen Workspace nicht mehr reproduzierbar.
+- Der zuvor dokumentierte `IndentationError` in `app/gui.py` ist im aktuellen Workspace nicht mehr reproduzierbar.
 - `app/gui.py` ist syntaktisch korrekt; `python -m compileall` laeuft fuer Einstiegspunkt, App-, Core- und Testmodule erfolgreich.
-- Die vorhandenen Unit-Tests laufen erfolgreich, decken aber weiterhin vor allem die Transcriber-Logik ab.
-- Ein expliziter GUI-Smoke-Test fehlt weiterhin und sollte ergaenzt werden, damit Import-/Startfehler frueh auffallen.
+- `tests/test_gui_smoke.py` ist vorhanden und prüft den Import von `app.gui` und `main`, ohne ein GUI-Fenster zu instanziieren.
+- Die Testsuite läuft erfolgreich mit `python -m unittest discover -s record_and_transcript\tests -v`.
 
-## Teststatus 2026-07-16
-
-- `tests/test_gui_smoke.py` prueft den Import von `app.gui` und `main`, ohne ein GUI-Fenster zu instanziieren.
-- Die Testsuite umfasst aktuell 4 Tests und laeuft erfolgreich mit `python -m unittest discover -s record_and_transcript\tests -v`.

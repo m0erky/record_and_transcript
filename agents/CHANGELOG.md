@@ -1,14 +1,39 @@
 # CHANGELOG.md
 
+## 2026-07-16 Dokumentations-Update
+
+- Die wichtigsten Projekt-MD-Dateien wurden an den aktuellen Stand angepasst: `README.md`, `PROJECT.md`, `TASKS.md` und dieses Changelog.
+- Der Projektstatus ist jetzt konsistent dokumentiert: GUI-Analyse, zentralisiertes Busy-/State-Handling, GUI-Smoke-Test und erfolgreiche Testsuite.
+- Der nächste offene Schritt ist die weitere Modularisierung der GUI-Workflows.
+
+## 2026-07-16 State-Refactor
+
+
+- Busy-/State-Handling in `app/gui.py` wurde zentralisiert.
+- `_set_busy(...)` nutzt jetzt gemeinsame Helfer fuer Widget-Zustand und Aufnahmezustand (`_set_widgets_state(...)` und `_sync_recording_controls(...)`).
+- Die GUI bleibt funktional, ist aber beim Zustandshandling weniger doppelt kodiert.
+
+## 2026-07-16 GUI-Analyse
+
+
+- `app/gui.py` wurde auf Verantwortlichkeiten analysiert: Initialisierung, UI-Aufbau, Geräteverwaltung, Aufnahme, Audio-Verbesserung, Transkription, Wiedergabe, Speicherung und Zustandsteuerung liegen aktuell gemeinsam in der Hauptklasse.
+- Als naechster Refactor-Schritt bietet sich eine Trennung in Zustandsverwaltung, Workflow-Logik und Anzeige-/Callback-Hilfen an.
+
+## 2026-07-16 Sprintplanung
+
+
+- Die naechste Arbeitsphase ist als Sprint in `TASKS.md` dokumentiert: GUI stabilisieren und modularisieren.
+- Der Sprint fokussiert auf GUI-Struktur, Sprecher-UI, Diarisierungsbewertung und Verifikation.
+
 ## 2026-07-16 Verifikation
 
 - `app/gui.py` ist im aktuellen Workspace syntaktisch korrekt; der zuvor dokumentierte `IndentationError` ist nicht mehr reproduzierbar.
 - `python -m compileall -q record_and_transcript\main.py record_and_transcript\app record_and_transcript\core record_and_transcript\tests` wurde erfolgreich ausgefuehrt.
 - `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgefuehrt: 4 Tests bestanden.
-- GUI-Smoke-Test `tests/test_gui_smoke.py` ergaenzt.
-- `PROJECT.md`, `TASKS.md` und `CHANGELOG.md` wurden an diesen aktuellen Status angepasst.
-- Der GUI-Smoke-Test prueft Modulimporte und instanziiert kein Fenster.
+- `tests/test_gui_smoke.py` ist vorhanden und prueft Modulimporte, ohne ein Fenster zu instanziieren.
+- `PROJECT.md`, `TASKS.md`, `README.md` und `CHANGELOG.md` wurden an diesen aktuellen Status angepasst.
 - Die Testsuite wurde nach der Repository-Bereinigung erneut ausgefuehrt und besteht weiterhin aus 4 Tests.
+
 
 
 ## 2026-07-16 Repository-Hygiene

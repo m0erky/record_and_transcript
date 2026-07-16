@@ -432,45 +432,73 @@ class AudioTranscriptionApp(ctk.CTk):
         )
 
     def _set_status(self, message: str) -> None:
+
+
         self.status_label.configure(text=f"Status: {message}")
+
+    def _set_widgets_state(self, widgets: list, state: str) -> None:
+        for widget in widgets:
+            widget.configure(state=state)
+
+    def _sync_recording_controls(self) -> None:
+
+        if self.recorder.is_recording:
+            self.record_button.configure(text="Aufnahme stoppen", fg_color="#27ae60")
+            self.pause_record_button.configure(
+                text="Fortsetzen" if self.recorder.is_paused else "Pause",
+                state="normal",
+            )
+            self.load_button.configure(state="disabled")
+        else:
+            self.record_button.configure(text="Aufnahme starten", fg_color="#c0392b")
+            self.pause_record_button.configure(text="Pause", state="disabled")
+            self.load_button.configure(state="normal")
 
     def _set_busy(self, busy: bool) -> None:
         state = "disabled" if busy else "normal"
-        self.record_button.configure(state=state)
-        self.transcribe_button.configure(state=state)
-        self.enhance_button.configure(state=state)
-        self.play_pause_button.configure(state=state)
-        self.rewind_button.configure(state=state)
-        self.forward_button.configure(state=state)
-        self.stop_button.configure(state=state)
-        self.load_button.configure(state=state)
-        self.chk_speaker_diarization.configure(state=state)
-        self.chk_system_audio.configure(state=state)
-        self.chk_normalize.configure(state=state)
-        self.chk_high_pass.configure(state=state)
-        self.chk_noise_reduce.configure(state=state)
-        self.chk_auto_enhance.configure(state=state)
+        self._set_widgets_state(
+            [
+                self.record_button,
+                self.transcribe_button,
+                self.enhance_button,
+                self.play_pause_button,
+                self.rewind_button,
+                self.forward_button,
+                self.stop_button,
+                self.load_button,
+                self.chk_speaker_diarization,
+                self.chk_system_audio,
+                self.chk_normalize,
+                self.chk_high_pass,
+                self.chk_noise_reduce,
+                self.chk_auto_enhance,
+            ],
+            state,
+        )
 
         if busy:
             self.pause_record_button.configure(state="disabled")
             self._set_speaker_controls_enabled(False)
-        elif self.recorder.is_recording:
-            self.pause_record_button.configure(state="normal")
-            self._set_speaker_controls_enabled(bool(self.chk_speaker_diarization.get()))
-        else:
-            self.pause_record_button.configure(state="disabled")
-            self._set_speaker_controls_enabled(bool(self.chk_speaker_diarization.get()))
+            return
+
+        self._sync_recording_controls()
+        self._set_speaker_controls_enabled(
+            bool(self.chk_speaker_diarization.get()) and not self.recorder.is_recording
+        )
+
+
+
 
 
     def _toggle_recording(self) -> None:
+
         if self.recorder.is_recording:
+
             self.raw_audio = self.recorder.stop()
             self.enhanced_audio = None
             self.enhancement_steps = []
             self.enhance_info.configure(text="Noch keine Verbesserung angewendet.")
-            self.record_button.configure(text="Aufnahme starten", fg_color="#c0392b")
-            self.pause_record_button.configure(text="Pause", state="disabled")
-            self.load_button.configure(state="normal")
+            self._sync_recording_controls()
             duration = len(self.raw_audio) / SAMPLE_RATE if self.raw_audio.size else 0
             self._set_status(f"Aufnahme beendet ({duration:.1f} s)")
             self.progress.set(0)
@@ -479,6 +507,7 @@ class AudioTranscriptionApp(ctk.CTk):
             return
 
         device_index = self._selected_device_index()
+
         if device_index is None:
             messagebox.showerror("Fehler", "Kein Mikrofon ausgewählt.")
             return
@@ -503,6 +532,7 @@ class AudioTranscriptionApp(ctk.CTk):
             return
 
         self.raw_audio = np.array([], dtype=np.float32)
+
         self.enhanced_audio = None
         self.transcript_text = ""
         self.enhancement_steps = []
@@ -510,26 +540,28 @@ class AudioTranscriptionApp(ctk.CTk):
         self.enhance_info.configure(text="Noch keine Verbesserung angewendet.")
         self.textbox.delete("1.0", "end")
         self.waveform.clear()
-        self.record_button.configure(text="Aufnahme stoppen", fg_color="#27ae60")
-        self.pause_record_button.configure(text="Pause", state="normal")
-        self.load_button.configure(state="disabled")
+        self._sync_recording_controls()
         mode = "Mikrofon + System" if include_system else "Mikrofon"
         self._set_status(f"Aufnahme läuft ({mode})...")
 
+
     def _toggle_recording_pause(self) -> None:
+
         if not self.recorder.is_recording:
             return
 
         if self.recorder.is_paused:
+
             self.recorder.resume()
-            self.pause_record_button.configure(text="Pause")
+            self._sync_recording_controls()
             mode = "Mikrofon + System" if bool(self.chk_system_audio.get()) else "Mikrofon"
             self._set_status(f"Aufnahme läuft ({mode})...")
             return
 
         self.recorder.pause()
-        self.pause_record_button.configure(text="Fortsetzen")
+        self._sync_recording_controls()
         self._set_status("Aufnahme pausiert")
+
 
     def _load_audio_file(self) -> None:
         if self.recorder.is_recording:
@@ -561,6 +593,8 @@ class AudioTranscriptionApp(ctk.CTk):
 
         self.player.stop()
         self.raw_audio = audio
+
+
         self.enhanced_audio = None
         self.transcript_text = ""
         self.enhancement_steps = []
@@ -569,9 +603,9 @@ class AudioTranscriptionApp(ctk.CTk):
         self.textbox.delete("1.0", "end")
         self.progress.set(0)
         self.preview_source_menu.set("Aufnahme")
-        self.record_button.configure(text="Aufnahme starten", fg_color="#c0392b")
-        self.pause_record_button.configure(text="Pause", state="disabled")
+        self._sync_recording_controls()
         self._reload_player()
+
 
         duration = len(self.raw_audio) / SAMPLE_RATE if self.raw_audio.size else 0
         self._set_status(f"Datei geladen: {Path(path).name} ({duration:.1f} s)")

@@ -20,8 +20,13 @@ Windows-Desktop-App zum Aufnehmen, Verbessern und Transkribieren von Sprache mit
 - Lokale Whisper-Transkription (offline)
 - **Optionale Sprecher-Unterscheidung** im Transkript (`Sprecher 1`, `Sprecher 2`, ...)
 - Export als Word-Dokument (`.docx`)
-
 - Speichern von Roh-Aufnahme, verbesserter Aufnahme und Transkript
+
+## Aktueller Stand
+
+- Die App ist als lokale Windows-Desktop-Anwendung mit Whisper-Transkription, optionaler Sprecher-Unterscheidung und dateibasiertem Speichern aufgebaut.
+- Die GUI-Zustandslogik wurde bereits teilweise zentralisiert; weitere Modularisierung ist als nächster Entwicklungsschritt vorgesehen.
+- Ein GUI-Smoke-Test ist vorhanden, und die aktuelle Testsuite läuft erfolgreich.
 
 ## Voraussetzungen
 
@@ -32,10 +37,12 @@ Windows-Desktop-App zum Aufnehmen, Verbessern und Transkribieren von Sprache mit
 
 ## Installation
 
+
 ```powershell
-cd audio_transk
+cd record_and_transcript
 python -m venv venv
 .\venv\Scripts\activate
+
 pip install -r requirements.txt
 ```
 
@@ -58,15 +65,21 @@ python main.py
 9. **Transkribieren**
 10. **Als DOCX exportieren** oder **Alles speichern**
 
-
-
 Beim „Alles speichern“ werden Dateien unter `output/sessions/<Zeitstempel>/` abgelegt:
 
 ```
+
 recording_raw.wav
 recording_enhanced.wav   (falls verbessert)
 transcript.txt
 transcript.docx
+```
+
+## Entwicklung und Tests
+
+```powershell
+python -m unittest discover -s tests -v
+python -m py_compile app\gui.py
 ```
 
 ## Hinweise
@@ -74,6 +87,7 @@ transcript.docx
 - Beim ersten Transkribieren wird das Whisper-Modell heruntergeladen (je nach Größe ca. 75–1500 MB).
 - Für Deutsch empfiehlt sich das Modell `small`.
 - Die Transkription läuft auf der CPU (`int8`). Über die App kann auch `auto` oder `cuda` gewählt werden.
+
 - **Sprecher-Unterscheidung** arbeitet vollständig lokal und heuristisch auf Basis der Whisper-Segmente. Sie ist nützlich für Meetings/Interviews, aber nicht so präzise wie spezialisierte Diarisierungsmodelle.
 - **System-Audio**: Funktioniert unter Windows über WASAPI-Loopback. Wähle das Ausgabegerät, über das Teams/Browser Ton ausgibt (meist deine Lautsprecher oder Kopfhörer).
 
