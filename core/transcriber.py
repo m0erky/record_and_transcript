@@ -251,12 +251,45 @@ class WhisperTranscriber:
                 f"Transkription läuft ({resolved_device.upper()}, {resolved_compute_type})..."
             )
 
-        whisper_segments, info = self._model.transcribe(
-            audio,
-            language=None if language == "auto" else language,
-            beam_size=5,
-            vad_filter=True,
-        )
+        try:
+            whisper_segments, info = self._model.transcribe(
+                audio,
+                language=None if language == "auto" else language,
+                beam_size=5,
+                vad_filter=True,
+            )
+        except Exception as exc:
+            if resolved_device != "cuda" or not self._is_cuda_library_load_issue(exc):
+                raise RuntimeError(f"Whisper-Transkription fehlgeschlagen: {exc}") from exc
+
+            if on_progress:
+                on_progress("CUDA-Inferenz fehlgeschlagen, wechsle auf CPU...")
+
+            self._model = WhisperModel(
+                model_size,
+                device="cpu",
+                compute_type="int8",
+            )
+            self._loaded_config = (model_size, "cpu", "int8")
+            resolved_device, resolved_compute_type = "cpu", "int8"
+
+            if on_progress:
+                on_progress(
+                    f"Transkription läuft ({resolved_device.upper()}, {resolved_compute_type})..."
+                )
+
+            try:
+                whisper_segments, info = self._model.transcribe(
+                    audio,
+                    language=None if language == "auto" else language,
+                    beam_size=5,
+                    vad_filter=True,
+                )
+            except Exception as cpu_exc:
+                raise RuntimeError(
+                    "Whisper konnte weder auf CUDA noch auf CPU transkribieren: "
+                    f"CUDA-Fehler: {exc}; CPU-Fehler: {cpu_exc}"
+                ) from cpu_exc
 
         transcript_segments = self._collect_transcript_segments(whisper_segments)
         if speaker_diarization and transcript_segments:
@@ -278,6 +311,7 @@ class WhisperTranscriber:
             duration=duration,
             segments=transcript_segments,
         )
+
 
 
     def _collect_transcript_segments(self, whisper_segments) -> list[TranscriptSegment]:
@@ -738,6 +772,7 @@ class WhisperTranscriber:
             self._loaded_config = requested_config
             return requested_device, requested_compute_type
         except Exception as exc:
+
             if requested_device != "cuda":
                 raise RuntimeError(
                     f"Whisper konnte nicht auf {requested_device.upper()} geladen werden: {exc}"
@@ -762,9 +797,30 @@ class WhisperTranscriber:
             self._loaded_config = (model_size, fallback_device, fallback_compute_type)
             return fallback_device, fallback_compute_type
 
+
+
+    @classmethod
+    def _is_cuda_library_load_issue(cls, exc: Exception) -> bool:
+
+
+        message = str(exc).lower()
+        return any(
+            token in message
+            for token in (
+                "cublas64_12.dll",
+                "cublaslt64_12.dll",
+                "cudart64_12.dll",
+                "cuda runtime",
+                "library cublas64_12.dll",
+                "cannot be loaded",
+                "not found",
+            )
+        )
+
     def _resolve_execution_mode(self, execution_mode: str) -> tuple[str, str]:
 
         mode = execution_mode.lower().strip()
+
         if mode not in self.EXECUTION_MODES:
             raise ValueError(f"Unbekannter Rechenmodus: {execution_mode}")
 

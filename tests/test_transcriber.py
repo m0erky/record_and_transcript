@@ -95,6 +95,46 @@ class WhisperTranscriberTests(unittest.TestCase):
         self.assertEqual((device, compute_type), ("cpu", "int8"))
         self.assertEqual(self.transcriber._model.model.device, "cpu")
 
+    def test_transcribe_falls_back_to_cpu_when_cuda_inference_fails(self) -> None:
+        fake_ctranslate2 = type(
+            "FakeCTranslate2",
+            (),
+            {"get_cuda_device_count": staticmethod(lambda: 1)},
+        )
+
+        class FakeInfo:
+            language = "de"
+
+        class FakeCudaModel:
+            def __init__(self) -> None:
+                self.model = type("InnerModel", (), {"device": "cuda"})()
+
+            def transcribe(self, *_args, **_kwargs):
+                raise RuntimeError("Library cublas64_12.dll is not found or cannot be loaded.")
+
+        class FakeCpuModel:
+            def __init__(self) -> None:
+                self.model = type("InnerModel", (), {"device": "cpu"})()
+
+            def transcribe(self, *_args, **_kwargs):
+                return iter([type("Seg", (), {"text": "Hallo", "start": 0.0, "end": 1.0})()]), FakeInfo()
+
+        def fake_whisper_model(*_args, **kwargs):
+            if kwargs.get("device") == "cuda":
+                return FakeCudaModel()
+            return FakeCpuModel()
+
+        audio = np.ones(16000, dtype=np.float32)
+
+        with patch("core.transcriber.ctranslate2", fake_ctranslate2), patch(
+            "core.transcriber.WhisperModel",
+            side_effect=fake_whisper_model,
+        ):
+            result = self.transcriber.transcribe(audio=audio, execution_mode="cuda")
+
+        self.assertEqual(result.text, "Hallo")
+        self.assertEqual(self.transcriber._model.model.device, "cpu")
+
     def test_available_execution_modes_includes_cuda_when_cuda_device_is_detected(self) -> None:
         fake_ctranslate2 = type(
             "FakeCTranslate2",
