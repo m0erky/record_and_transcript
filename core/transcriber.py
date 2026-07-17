@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -45,10 +46,71 @@ class TranscriptionResult:
 class WhisperTranscriber:
     MODEL_SIZES = ("tiny", "base", "small", "medium")
     EXECUTION_MODES = ("auto", "cpu", "cuda")
+    _registered_dll_directories: set[str] = set()
+    _dll_directory_handles: list[object] = []
 
     def __init__(self) -> None:
+        self._ensure_windows_cuda_runtime_paths()
         self._model: WhisperModel | None = None
         self._loaded_config: tuple[str, str, str] | None = None
+
+    @classmethod
+    def _ensure_windows_cuda_runtime_paths(cls) -> None:
+        if sys.platform != "win32":
+            return
+
+        def _prepend_to_path(directory: Path) -> None:
+            resolved = str(directory.resolve(strict=False))
+            current_path = os.environ.get("PATH", "")
+            parts = [part for part in current_path.split(os.pathsep) if part]
+            if any(part.lower() == resolved.lower() for part in parts):
+                return
+            os.environ["PATH"] = os.pathsep.join([resolved, *parts]) if parts else resolved
+
+        def _register(directory: Path) -> None:
+            resolved = directory.resolve(strict=False)
+            if not resolved.is_dir():
+                return
+            key = str(resolved).lower()
+            if key in cls._registered_dll_directories:
+                _prepend_to_path(resolved)
+                return
+            if hasattr(os, "add_dll_directory"):
+                try:
+                    handle = os.add_dll_directory(str(resolved))
+                except OSError:
+                    handle = None
+                else:
+                    cls._dll_directory_handles.append(handle)
+            cls._registered_dll_directories.add(key)
+            _prepend_to_path(resolved)
+
+        candidates: list[Path] = []
+        env_keys = ("CUDA_PATH", "CUDA_HOME", "NVIDIA_CUDA_PATH", "CUDA_BIN_PATH")
+        for env_key in env_keys:
+            value = os.environ.get(env_key)
+            if value:
+                candidate = Path(value)
+                candidates.append(candidate if candidate.name.lower() == "bin" else candidate / "bin")
+        for env_key, value in os.environ.items():
+            if env_key.startswith("CUDA_PATH") and value:
+                candidate = Path(value)
+                candidates.append(candidate if candidate.name.lower() == "bin" else candidate / "bin")
+        for root_key in ("ProgramFiles", "ProgramFiles(x86)"):
+            root_value = os.environ.get(root_key)
+            if not root_value:
+                continue
+            cuda_root = Path(root_value) / "NVIDIA GPU Computing Toolkit" / "CUDA"
+            if cuda_root.exists():
+                candidates.extend(cuda_root.glob("*/bin"))
+
+        for candidate in candidates:
+            _register(candidate)
+
+    @classmethod
+    def _is_dll_load_error(cls, exc: Exception) -> bool:
+        message = str(exc).lower()
+        return any(token in message for token in ("dll", "cannot be loaded", "could not be loaded", "loadlibrary", "not found"))
 
     @classmethod
     def _cuda_device_issue(cls) -> str | None:
@@ -62,6 +124,7 @@ class WhisperTranscriber:
 
     @classmethod
     def _cuda_model_smoke_test_issue(cls) -> str | None:
+        cls._ensure_windows_cuda_runtime_paths()
         issue = cls._cuda_device_issue()
         if issue:
             return issue
@@ -148,7 +211,20 @@ class WhisperTranscriber:
             )
             whisper_segments = list(whisper_segments)
         except Exception as exc:
-            raise RuntimeError(f"Whisper-Transkription fehlgeschlagen auf {actual_device}: {exc}") from exc
+            if actual_device == "cuda" and self._is_dll_load_error(exc):
+                self._ensure_windows_cuda_runtime_paths()
+                try:
+                    whisper_segments, info = self._model.transcribe(
+                        audio,
+                        language=None if language == "auto" else language,
+                        beam_size=5,
+                        vad_filter=True,
+                    )
+                    whisper_segments = list(whisper_segments)
+                except Exception as retry_exc:
+                    raise RuntimeError(f"Whisper-Transkription fehlgeschlagen auf {actual_device}: {retry_exc}") from retry_exc
+            else:
+                raise RuntimeError(f"Whisper-Transkription fehlgeschlagen auf {actual_device}: {exc}") from exc
         if on_progress:
             on_progress(f"Whisper-Transkription abgeschlossen auf {actual_device}.")
         transcript_segments = self._collect_transcript_segments(whisper_segments)
@@ -410,6 +486,7 @@ class WhisperTranscriber:
         return f"{hours:02d}:{minutes:02d}:{secs:02d}" if hours else f"{minutes:02d}:{secs:02d}"
 
     def _ensure_model(self, model_size: str, execution_mode: str = "auto", on_progress: Callable[[str], None] | None = None) -> tuple[str, str]:
+        self._ensure_windows_cuda_runtime_paths()
         requested_device, requested_compute_type = self._resolve_execution_mode(execution_mode)
         requested_config = (model_size, requested_device, requested_compute_type)
         if self._model is not None and self._loaded_config == requested_config:
@@ -419,7 +496,14 @@ class WhisperTranscriber:
         try:
             self._model = WhisperModel(model_size, device=requested_device, compute_type=requested_compute_type)
         except Exception as exc:
-            raise RuntimeError(f"Whisper konnte nicht auf {requested_device.upper()} geladen werden: {exc}") from exc
+            if requested_device == "cuda" and self._is_dll_load_error(exc):
+                self._ensure_windows_cuda_runtime_paths()
+                try:
+                    self._model = WhisperModel(model_size, device=requested_device, compute_type=requested_compute_type)
+                except Exception as retry_exc:
+                    raise RuntimeError(f"Whisper konnte nicht auf {requested_device.upper()} geladen werden: {retry_exc}") from retry_exc
+            else:
+                raise RuntimeError(f"Whisper konnte nicht auf {requested_device.upper()} geladen werden: {exc}") from exc
         self._loaded_config = requested_config
         return requested_device, requested_compute_type
 

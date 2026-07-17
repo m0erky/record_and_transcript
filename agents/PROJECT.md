@@ -38,8 +38,11 @@ Die Anwendung ist in wenige klar getrennte Schichten gegliedert:
 - Aktivieren und Deaktivieren von UI-Elementen in Abhängigkeit vom App-Zustand
 
 Die aktuelle GUI-Struktur ist funktional, aber weiterhin verzahnt. Für spätere Refactors bietet sich eine Trennung in Zustandsverwaltung, Aufnahme-/Transkriptions-Workflow und Anzeige-/Callback-Logik an.
-Der erste Schritt zur Zustandsentkopplung ist umgesetzt: `_set_busy(...)` arbeitet mit `_set_widgets_state(...)` und `_sync_recording_controls(...)`, um Busy-State und Aufnahmezustand zu trennen. Die Speaker-bezogenen Helfer `_speaker_settings(...)` und `_speaker_metadata(...)` sind ebenfalls zentralisiert. Die CUDA-Diagnose basiert auf GPU-Erkennung, relevanten PATH-Einträgen und einem echten Whisper/CTranslate2-Modelltest; zusätzlich gibt es einen CUDA-Diagnose-Dialog in der GUI.
-Die Whisper-Transkription protokolliert den tatsächlich verwendeten Rechenmodus über `on_progress(...)` in der GUI, statt ein separates Logfile zu schreiben. Es gibt bewusst keinen automatischen CPU-Fallback im Transkriptionspfad; Fehler werden direkt an die Oberfläche gemeldet.
+Der erste Schritt zur Zustandsentkopplung ist umgesetzt: `_set_busy(...)` arbeitet mit `_set_widgets_state(...)` und `_sync_recording_controls(...)`, um Busy-State und Aufnahmezustand zu trennen. Die Speaker-bezogenen Helfer `_speaker_settings(...)` und `_speaker_metadata(...)` sind ebenfalls zentralisiert. Die CUDA-Diagnose basiert auf GPU-Erkennung, relevanten PATH-Einträgen und einem echten Whisper/CTranslate2-Modelltest; zusätzlich gibt es einen CUDA-Diagnose-Dialog in der GUI. Auf Windows registriert der Transcriber vor Whisper-Aufrufen CUDA-DLL-Verzeichnisse aus typischen Installationspfaden und aus Prozessvariablen, damit Laufzeitbibliotheken wie `cublas64_12.dll` gefunden werden können.
+Die Whisper-Transkription protokolliert den tatsächlich verwendeten Rechenmodus über `on_progress(...)` in der GUI, statt ein separates Logfile zu schreiben. Es gibt bewusst keinen automatischen CPU-Fallback im Transkriptionspfad; Fehler werden direkt an die Oberfläche gemeldet. CUDA-/Whisper-Exceptions werden im Standard-Fehlerdialog unverändert angezeigt, damit die Ursache unmittelbar sichtbar ist.
+
+
+
 
 
 
@@ -266,7 +269,11 @@ Es gibt keine externe HTTP-API.
 - Die CUDA-Diagnose ist auf einen echten Whisper/CTranslate2-Modelltest ausgerichtet und ergänzt um PATH-Hinweise aus dem laufenden App-Prozess.
 - Die GUI bietet zusätzlich einen CUDA-Diagnose-Dialog, der GPU-Erkennung, PATH-Hinweise und den Modelltest im laufenden App-Prozess anzeigt.
 - Die laufende Whisper-Transkription meldet den aktiven Rechenmodus in der Statuszeile; es gibt kein separates Logfile.
-- Die aktuelle Testsuite umfasst 8 Tests und wurde im aktuellen Workspace erfolgreich verifiziert.
+- Auf Windows registriert der Transcriber CUDA-DLL-Verzeichnisse automatisch, damit Laufzeitbibliotheken wie `cublas64_12.dll` gefunden werden.
+- CUDA-bezogene Laufzeitfehler werden im Standard-Dialog mit der tatsächlichen Exception angezeigt; der technische Modelltest bleibt im CUDA-Diagnose-Dialog verfügbar.
+- Die aktuelle Testsuite umfasst 10 Tests und wurde im aktuellen Workspace erfolgreich verifiziert.
+
+
 
 
 
@@ -278,6 +285,11 @@ Es gibt keine externe HTTP-API.
 - `tests/test_gui_smoke.py` ist vorhanden und prüft den Import von `app.gui` und `main`, ohne ein GUI-Fenster zu instanziieren.
 - Die CUDA-Diagnose verwendet einen echten Modelltest statt einer harten DLL-Prüfung; Fehlermeldungen sind damit besser auf den App-Prozess bezogen.
 - Die Transkriptions-Statusmeldungen zeigen den von Whisper gemeldeten Rechenmodus, damit CUDA-Nutzung im laufenden App-Prozess besser nachvollziehbar ist.
+- CUDA-Laufzeitfehler werden im Standard-Fehlerdialog mit den echten Backend-Details angezeigt, damit die Ursache direkt nachvollziehbar ist.
+- Auf Windows werden CUDA-DLL-Verzeichnisse vor Whisper-Aufrufen automatisch registriert, um typische Laufzeit-DLLs wie `cublas64_12.dll` auflösbar zu machen.
+
+
+
 
 
 - Der nächste inhaltliche Schritt liegt bei Sprecher-UX und Diarisierungsbewertung.

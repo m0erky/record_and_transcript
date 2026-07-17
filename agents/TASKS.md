@@ -4,12 +4,18 @@
 
 - Task 1 ist abgeschlossen: `app/gui.py` wurde analysiert und die großen Verantwortlichkeiten sind markiert.
 - Task 2 ist abgeschlossen: Busy-/State-Handling ist zentralisiert.
-- Die aktuelle Testsuite und der GUI-Smoke-Test laufen erfolgreich; die Suite umfasst jetzt 8 Tests.
+- Die aktuelle Testsuite und der GUI-Smoke-Test laufen erfolgreich; die Suite umfasst jetzt 9 Tests.
+
 - Task 3 ist abgeschlossen: Recording-, Transcription- und UI-Update-Logik sind in Hilfsmethoden zerlegt.
 - Task 4 ist syntaktisch bereinigt und verifiziert; die konzeptionelle Sprecherbearbeitung bleibt offen.
 - Nächster Fokus: Sprecher-UX konzipieren und heuristische Diarisierung bewerten.
 - CUDA-Diagnose für die Transkription ist umgesetzt; in der GUI gibt es zusätzlich einen CUDA-Diagnose-Dialog mit Modelltest.
 - Die Transkription selbst meldet den tatsächlich verwendeten Rechenmodus in der GUI-Statuszeile; es gibt aktuell kein separates Logfile.
+- Auf Windows werden CUDA-DLL-Verzeichnisse vor Whisper-Aufrufen automatisch registriert, damit Laufzeitbibliotheken wie `cublas64_12.dll` gefunden werden.
+- CUDA-Laufzeitfehler werden im Standarddialog mit der echten Backend-Exception angezeigt, damit die Ursache direkt sichtbar ist.
+
+
+
 
 
 
@@ -46,6 +52,11 @@ Die Sprecherbearbeitung soll im UI klar beschrieben werden, bevor weitere GUI-Re
 - [x] CUDA-Diagnose für die Transkription implementieren.
 - [x] Aktive Whisper-Gerätelogik in der GUI-Statuszeile sichtbar machen.
 - [x] Kein separates Logfile einführen; Status- und Fehlerausgabe bleiben GUI-basiert.
+- [x] CUDA-/Whisper-Fehlerdialoge so anpassen, dass die echte Backend-Exception angezeigt wird.
+- [x] CUDA-DLL-Suchpfade unter Windows automatisch registrieren, damit typische Laufzeitbibliotheken gefunden werden.
+
+
+
 
 
 
@@ -101,7 +112,12 @@ Die Sprecherbearbeitung soll im UI klar beschrieben werden, bevor weitere GUI-Re
 - Task 2 und Task 3 sind erledigt; der nächste fachliche Schritt ist die Sprecher-UX und die Bewertung der heuristischen Diarisierung.
 - Der Speaker-Control-Refactor ist syntaktisch bereinigt und verifiziert.
 - CUDA-Fehler auf Windows werden jetzt über den realen Modelltest und die App-Umgebung diagnostiziert, statt über eine reine WinDLL-Prüfung.
-- Die eigentliche Transkription soll den von Whisper verwendeten Modus direkt nutzen und über Statusmeldungen sichtbar machen, ohne einen separaten Logfile-Workflow.
+- Die eigentliche Transkription nutzt den von Whisper verwendeten Modus direkt und macht ihn über Statusmeldungen sichtbar.
+- CUDA-/Whisper-Fehlerdialoge zeigen die echte Exception, damit die Ursache nicht hinter einer generischen Meldung verborgen bleibt.
+- CUDA-DLL-Suchpfade werden unter Windows automatisch registriert, um Laufzeitbibliotheken wie `cublas64_12.dll` auffindbar zu machen.
+
+
+
 
 
 

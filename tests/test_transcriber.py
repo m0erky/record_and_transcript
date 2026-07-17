@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -82,7 +83,7 @@ class WhisperTranscriberTests(unittest.TestCase):
     def test_ensure_model_raises_when_cuda_model_load_fails(self) -> None:
         def fake_whisper_model(*_args, **kwargs):
             if kwargs.get("device") == "cuda":
-                raise RuntimeError("cuda load failed")
+                raise RuntimeError("cublas64_12.dll cannot be loaded")
             raise AssertionError("CPU fallback must not be attempted")
 
         with patch("core.transcriber.WhisperModel", side_effect=fake_whisper_model):
@@ -90,6 +91,31 @@ class WhisperTranscriberTests(unittest.TestCase):
                 self.transcriber._ensure_model("tiny", "cuda")
 
         self.assertIn("Whisper konnte nicht auf CUDA geladen werden", str(ctx.exception))
+        self.assertIn("cublas64_12.dll cannot be loaded", str(ctx.exception))
+
+    def test_windows_cuda_runtime_paths_registers_cuda_bin_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cuda_root = Path(temp_dir)
+            bin_dir = cuda_root / "bin"
+            bin_dir.mkdir()
+            added_paths: list[str] = []
+
+            def fake_add_dll_directory(path: str):
+                added_paths.append(path)
+                return object()
+
+            with patch("core.transcriber.sys.platform", "win32"), patch.dict(
+                "core.transcriber.os.environ",
+                {"CUDA_PATH": str(cuda_root)},
+                clear=True,
+            ), patch("core.transcriber.os.add_dll_directory", side_effect=fake_add_dll_directory), patch.object(
+                WhisperTranscriber,
+                "_registered_dll_directories",
+                set(),
+            ), patch.object(WhisperTranscriber, "_dll_directory_handles", []):
+                WhisperTranscriber._ensure_windows_cuda_runtime_paths()
+
+        self.assertEqual(added_paths, [str(bin_dir)])
 
     def test_transcribe_logs_actual_cuda_device_when_cuda_transcription_succeeds(self) -> None:
         fake_ctranslate2 = type(
@@ -139,7 +165,7 @@ class WhisperTranscriberTests(unittest.TestCase):
                 self.model = type("InnerModel", (), {"device": "cuda"})()
 
             def transcribe(self, *_args, **_kwargs):
-                raise RuntimeError("CUDA inference failed")
+                raise RuntimeError("cublas64_12.dll cannot be loaded")
 
         audio = np.ones(16000, dtype=np.float32)
 
@@ -151,6 +177,7 @@ class WhisperTranscriberTests(unittest.TestCase):
                 self.transcriber.transcribe(audio=audio, execution_mode="cuda")
 
         self.assertIn("Whisper-Transkription fehlgeschlagen auf cuda", str(ctx.exception))
+        self.assertIn("cublas64_12.dll cannot be loaded", str(ctx.exception))
 
     def test_available_execution_modes_includes_cuda_when_cuda_device_is_detected(self) -> None:
         fake_ctranslate2 = type(

@@ -28,7 +28,10 @@ Windows-Desktop-App zum Aufnehmen, Verbessern und Transkribieren von Sprache mit
 - Die GUI-Zustandslogik wurde bereits teilweise zentralisiert; Recording-, Transcription- und Lade-Workflows sind in Hilfsmethoden aufgeteilt.
 - Die Whisper-Transkription loggt den aktuell verwendeten Rechenmodus über die GUI-Statusmeldungen, etwa `Whisper meldet aktives Gerät: cuda`.
 - CUDA wird über die GPU-Erkennung und einen echten Whisper/CTranslate2-Modelltest diagnostiziert; zusätzlich zeigt die GUI einen CUDA-Diagnose-Dialog mit PATH-Hinweisen und Status an.
+- Auf Windows registriert die App CUDA-DLL-Verzeichnisse aus dem laufenden Prozess und aus typischen CUDA-Installationspfaden und erweitert dafür auch den Prozess-`PATH`, damit Laufzeitbibliotheken wie `cublas64_12.dll` gefunden werden.
+
 - Es gibt aktuell kein separates Logfile; die Laufzeitmeldungen erscheinen in der GUI-Statuszeile und bei Fehlern im Popup.
+
 - Offen bleiben die konzeptionelle Sprecher-UX und die Bewertung der heuristischen Diarisierung.
 
 
@@ -93,9 +96,16 @@ python -m unittest discover -s tests -v
 - Für Deutsch empfiehlt sich das Modell `small`.
 - Über die App kann `auto`, `cpu` oder `cuda` gewählt werden, sofern die CUDA-12-Laufzeit auf Windows verfügbar ist.
 - Während der Transkription zeigt die GUI den von Whisper verwendeten Rechenmodus in den Statusmeldungen an. Beispiel: `Whisper meldet aktives Gerät: cuda`.
-- Es gibt aktuell kein separates Logfile; die Laufzeitmeldungen sind nur in der GUI-Statuszeile sichtbar. Bei Fehlern erscheint ein Popup mit der Exception.
+- Es gibt aktuell kein separates Logfile; die Laufzeitmeldungen sind nur in der GUI-Statuszeile sichtbar. Bei Fehlern erscheint ein Popup mit der tatsächlichen Whisper-/CUDA-Exception.
+
 - Falls `cuda` nicht angezeigt wird oder der CUDA-Modus Probleme macht, nutze den **CUDA prüfen**-Dialog in der GUI; er zeigt die GPU-Erkennung, relevante PATH-Einträge und den echten Whisper-Modelltest auf CUDA.
-- Wenn der Modelltest fehlschlägt, obwohl die GPU erkannt wird, verwende zunächst `auto` bzw. `cpu` oder prüfe die CUDA-Umgebung im Startprozess der App.
+- Wenn der Modelltest oder die Transkription trotz erkannter GPU scheitern, prüfe die CUDA-Installation bzw. starte die App erneut, damit die Laufzeit-DLLs registriert werden können.
+- Die Transkription versucht bei CUDA-DLL-Fehlern zusätzlich einmalig, den CUDA-Pfad erneut zu registrieren und den Aufruf zu wiederholen.
+
+- Wenn der CUDA-Laufzeitstack im Startprozess nicht vollständig verfügbar ist, wird die konkrete Exception im Fehlerdialog angezeigt, damit die Ursache direkt sichtbar ist.
+
+
+
 
 - **Sprecher-Unterscheidung** arbeitet vollständig lokal und heuristisch auf Basis der Whisper-Segmente. Sie ist nützlich für Meetings/Interviews, aber nicht so präzise wie spezialisierte Diarisierungsmodelle.
 - **System-Audio**: Funktioniert unter Windows über WASAPI-Loopback. Wähle das Ausgabegerät, über das Teams/Browser Ton ausgibt (meist deine Lautsprecher oder Kopfhörer).

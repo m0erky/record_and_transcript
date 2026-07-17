@@ -5,8 +5,13 @@
 - Die Whisper-Transkription meldet den tatsächlich verwendeten Rechenmodus jetzt über `on_progress(...)` an die GUI-Statuszeile.
 - Für CUDA-Transkription wird der von Whisper gemeldete aktive Modus sichtbar gemacht, statt auf einen separaten Logfile-Workflow zu setzen.
 - Die Transkription löst keine automatische CPU-Umschaltung mehr aus; Fehler werden direkt an die Oberfläche gemeldet.
+- CUDA-bezogene Laufzeitfehler werden im Standarddialog jetzt mit der tatsächlichen Whisper-/CUDA-Exception angezeigt, damit die Ursache direkt sichtbar ist.
+- Auf Windows werden CUDA-DLL-Verzeichnisse aus typischen Installationspfaden und Prozessvariablen automatisch registriert, damit Bibliotheken wie `cublas64_12.dll` auflösbar sind.
+
 - `python -m compileall record_and_transcript` wurde erfolgreich ausgeführt.
-- `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 8 Tests bestanden.
+- `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 10 Tests bestanden.
+
+
 
 ## 2026-07-17 CUDA-Diagnose-Dialog
 
