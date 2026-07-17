@@ -4,12 +4,13 @@
 
 - Task 1 ist abgeschlossen: `app/gui.py` wurde analysiert und die großen Verantwortlichkeiten sind markiert.
 - Task 2 ist abgeschlossen: Busy-/State-Handling ist zentralisiert.
-- Die aktuelle Testsuite und der GUI-Smoke-Test laufen erfolgreich; die Suite umfasst jetzt 6 Tests.
-
+- Die aktuelle Testsuite und der GUI-Smoke-Test laufen erfolgreich; die Suite umfasst jetzt 8 Tests.
 - Task 3 ist abgeschlossen: Recording-, Transcription- und UI-Update-Logik sind in Hilfsmethoden zerlegt.
 - Task 4 ist syntaktisch bereinigt und verifiziert; die konzeptionelle Sprecherbearbeitung bleibt offen.
 - Nächster Fokus: Sprecher-UX konzipieren und heuristische Diarisierung bewerten.
 - CUDA-Diagnose für die Transkription ist umgesetzt; in der GUI gibt es zusätzlich einen CUDA-Diagnose-Dialog mit Modelltest.
+- Die Transkription selbst meldet den tatsächlich verwendeten Rechenmodus in der GUI-Statuszeile; es gibt aktuell kein separates Logfile.
+
 
 
 
@@ -42,8 +43,10 @@ Die Sprecherbearbeitung soll im UI klar beschrieben werden, bevor weitere GUI-Re
 - [x] `compileall` bzw. Importprüfung zur Verifikation ausführen.
 - [x] `PROJECT.md`, `CHANGELOG.md` und `TASKS.md` nach Abschluss aktualisieren.
 - [x] CUDA-Diagnose-Dialog in der GUI implementieren und verifizieren.
+- [x] CUDA-Diagnose für die Transkription implementieren.
+- [x] Aktive Whisper-Gerätelogik in der GUI-Statuszeile sichtbar machen.
+- [x] Kein separates Logfile einführen; Status- und Fehlerausgabe bleiben GUI-basiert.
 
-- [x] CUDA-Preflight für die Transkription implementieren.
 
 
 
@@ -83,6 +86,8 @@ Die Sprecherbearbeitung soll im UI klar beschrieben werden, bevor weitere GUI-Re
 - `tests/test_gui_smoke.py` ist vorhanden und importgeprüft `app.gui` sowie `main`, ohne ein GUI-Fenster zu instanziieren.
 - Der Speaker-Control-Refactor ist syntaktisch bereinigt und verifiziert; die Sprecher-UX-Arbeit bleibt als nächster konzeptioneller Schritt offen.
 - CUDA wird in der GUI anhand der GPU-Erkennung angeboten; die Diagnose selbst prüft zusätzlich einen echten Whisper-Modelltest.
+- Die Transkription meldet den aktiven Rechenmodus über `on_progress(...)` an die GUI, damit CUDA-Nutzung nachvollziehbar bleibt.
+
 
 
 - Build-/Artefaktpflege geklärt: `build/`, `dist/` und andere generierte Artefakte bleiben unversioniert.
@@ -96,6 +101,8 @@ Die Sprecherbearbeitung soll im UI klar beschrieben werden, bevor weitere GUI-Re
 - Task 2 und Task 3 sind erledigt; der nächste fachliche Schritt ist die Sprecher-UX und die Bewertung der heuristischen Diarisierung.
 - Der Speaker-Control-Refactor ist syntaktisch bereinigt und verifiziert.
 - CUDA-Fehler auf Windows werden jetzt über den realen Modelltest und die App-Umgebung diagnostiziert, statt über eine reine WinDLL-Prüfung.
+- Die eigentliche Transkription soll den von Whisper verwendeten Modus direkt nutzen und über Statusmeldungen sichtbar machen, ohne einen separaten Logfile-Workflow.
+
 
 
 

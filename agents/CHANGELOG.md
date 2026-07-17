@@ -1,12 +1,18 @@
 # CHANGELOG.md
 
+## 2026-07-17 CUDA-Transkriptionslogging
+
+- Die Whisper-Transkription meldet den tatsächlich verwendeten Rechenmodus jetzt über `on_progress(...)` an die GUI-Statuszeile.
+- Für CUDA-Transkription wird der von Whisper gemeldete aktive Modus sichtbar gemacht, statt auf einen separaten Logfile-Workflow zu setzen.
+- Die Transkription löst keine automatische CPU-Umschaltung mehr aus; Fehler werden direkt an die Oberfläche gemeldet.
+- `python -m compileall record_and_transcript` wurde erfolgreich ausgeführt.
+- `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 8 Tests bestanden.
+
 ## 2026-07-17 CUDA-Diagnose-Dialog
 
-- In `app/gui.py` gibt es jetzt einen modalen CUDA-Diagnose-Dialog mit Runtime-Details und Kopierfunktion.
+- In `app/gui.py` gibt es weiterhin einen modalen CUDA-Diagnose-Dialog mit Runtime-Details und Kopierfunktion.
 - Der Dialog zeigt den CTranslate2-Status, die gefundene GPU-Anzahl, relevante PATH-Einträge und einen echten Whisper-Modelltest direkt im App-Kontext an.
 
-- `python -m compileall record_and_transcript` wurde erfolgreich ausgeführt.
-- `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 6 Tests bestanden.
 
 ## 2026-07-16 GUI-Syntax-Cleanup
 
@@ -120,6 +126,8 @@ Dieses Changelog dokumentiert die bisher erkannten Projektänderungen auf Basis 
 - Die CUDA-Diagnose wurde von einer harten DLL-Prüfung auf einen echten Whisper/CTranslate2-Modelltest umgestellt.
 - Zusätzlich werden relevante PATH-Einträge aus dem App-Prozess angezeigt, damit Umgebungsunterschiede sichtbar werden.
 - Damit lassen sich Fehlermeldungen besser zwischen GPU-Erkennung, Prozessumgebung und tatsächlichem Modelltest unterscheiden.
+- Die Transkriptionsausführung selbst bleibt nun strikt bei dem von Whisper gewählten Modus und meldet diesen über die GUI-Statuszeile.
+
 
 
 ## Aktueller Stand / bekannte Einschränkungen

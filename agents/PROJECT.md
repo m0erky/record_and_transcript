@@ -38,7 +38,9 @@ Die Anwendung ist in wenige klar getrennte Schichten gegliedert:
 - Aktivieren und Deaktivieren von UI-Elementen in Abhängigkeit vom App-Zustand
 
 Die aktuelle GUI-Struktur ist funktional, aber weiterhin verzahnt. Für spätere Refactors bietet sich eine Trennung in Zustandsverwaltung, Aufnahme-/Transkriptions-Workflow und Anzeige-/Callback-Logik an.
-Der erste Schritt zur Zustandsentkopplung ist umgesetzt: `_set_busy(...)` arbeitet mit `_set_widgets_state(...)` und `_sync_recording_controls(...)`, um Busy-State und Aufnahmezustand zu trennen. Die Speaker-bezogenen Helfer `_speaker_settings(...)` und `_speaker_metadata(...)` sind ebenfalls zentralisiert. Die CUDA-Diagnose basiert jetzt auf GPU-Erkennung, relevanten PATH-Einträgen und einem echten Whisper/CTranslate2-Modelltest; zusätzlich gibt es einen CUDA-Diagnose-Dialog in der GUI.
+Der erste Schritt zur Zustandsentkopplung ist umgesetzt: `_set_busy(...)` arbeitet mit `_set_widgets_state(...)` und `_sync_recording_controls(...)`, um Busy-State und Aufnahmezustand zu trennen. Die Speaker-bezogenen Helfer `_speaker_settings(...)` und `_speaker_metadata(...)` sind ebenfalls zentralisiert. Die CUDA-Diagnose basiert auf GPU-Erkennung, relevanten PATH-Einträgen und einem echten Whisper/CTranslate2-Modelltest; zusätzlich gibt es einen CUDA-Diagnose-Dialog in der GUI.
+Die Whisper-Transkription protokolliert den tatsächlich verwendeten Rechenmodus über `on_progress(...)` in der GUI, statt ein separates Logfile zu schreiben. Es gibt bewusst keinen automatischen CPU-Fallback im Transkriptionspfad; Fehler werden direkt an die Oberfläche gemeldet.
+
 
 
 
@@ -48,7 +50,8 @@ Der erste Schritt zur Zustandsentkopplung ist umgesetzt: `_set_busy(...)` arbeit
 - `core/audio_recorder.py` nimmt Mikrofon- und optional System-Audio auf.
 - `core/audio_processor.py` verbessert Audio vor der Transkription.
 - `core/audio_player.py` spielt Audio ab und steuert Play/Pause/Seek.
-- `core/transcriber.py` lädt Whisper, transkribiert Audio und optional führt eine heuristische Sprecher-Diarisierung aus.
+- `core/transcriber.py` lädt Whisper, transkribiert Audio und optional führt eine heuristische Sprecher-Diarisierung aus. Dabei werden der aktive Whisper-Rechenmodus und der Abschlussstatus über Progress-Meldungen an die GUI weitergegeben.
+
 - `core/storage.py` speichert Session-Dateien und Exporte.
 - `core/docx_exporter.py` erzeugt Word-Dokumente.
 
@@ -260,10 +263,11 @@ Es gibt keine externe HTTP-API.
 - Die GUI-Zustandssteuerung ist teilweise zentralisiert; Recording-, Transcription- und Lade-Workflows sind bereits in Hilfsmethoden zerlegt.
 - Die Speaker-Control-Logik ist syntaktisch bereinigt; die nächste fachliche Aufgabe ist die Konzeption der Sprecher-UX und die Bewertung der heuristischen Diarisierung.
 - `app/gui.py` ist syntaktisch korrekt; `compileall` und die Testsuite laufen erfolgreich.
-- Die CUDA-Diagnose ist jetzt auf einen echten Whisper/CTranslate2-Modelltest ausgerichtet und ergänzt um PATH-Hinweise aus dem laufenden App-Prozess.
+- Die CUDA-Diagnose ist auf einen echten Whisper/CTranslate2-Modelltest ausgerichtet und ergänzt um PATH-Hinweise aus dem laufenden App-Prozess.
 - Die GUI bietet zusätzlich einen CUDA-Diagnose-Dialog, der GPU-Erkennung, PATH-Hinweise und den Modelltest im laufenden App-Prozess anzeigt.
+- Die laufende Whisper-Transkription meldet den aktiven Rechenmodus in der Statuszeile; es gibt kein separates Logfile.
+- Die aktuelle Testsuite umfasst 8 Tests und wurde im aktuellen Workspace erfolgreich verifiziert.
 
-- Die aktuelle Testsuite umfasst 6 Tests und wurde im aktuellen Workspace erfolgreich verifiziert.
 
 
 
@@ -272,7 +276,9 @@ Es gibt keine externe HTTP-API.
 - Der zuvor dokumentierte `IndentationError` in `app/gui.py` ist im aktuellen Workspace behoben.
 - `app/gui.py` ist syntaktisch korrekt; `python -m compileall` und `python -m unittest discover -s record_and_transcript\tests -v` laufen erfolgreich.
 - `tests/test_gui_smoke.py` ist vorhanden und prüft den Import von `app.gui` und `main`, ohne ein GUI-Fenster zu instanziieren.
-- Die CUDA-Diagnose verwendet jetzt einen echten Modelltest statt einer harten DLL-Prüfung; Fehlermeldungen sind damit besser auf den App-Prozess bezogen.
+- Die CUDA-Diagnose verwendet einen echten Modelltest statt einer harten DLL-Prüfung; Fehlermeldungen sind damit besser auf den App-Prozess bezogen.
+- Die Transkriptions-Statusmeldungen zeigen den von Whisper gemeldeten Rechenmodus, damit CUDA-Nutzung im laufenden App-Prozess besser nachvollziehbar ist.
+
 
 - Der nächste inhaltliche Schritt liegt bei Sprecher-UX und Diarisierungsbewertung.
 

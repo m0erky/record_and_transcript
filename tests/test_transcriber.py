@@ -79,23 +79,19 @@ class WhisperTranscriberTests(unittest.TestCase):
         self.assertEqual(merged[0].speaker, "Sprecher 1")
         self.assertEqual(merged[1].speaker, "Sprecher 2")
 
-    def test_ensure_model_falls_back_to_cpu_when_cuda_model_load_fails(self) -> None:
-        class FakeModel:
-            def __init__(self, device: str) -> None:
-                self.model = type("InnerModel", (), {"device": device})()
-
+    def test_ensure_model_raises_when_cuda_model_load_fails(self) -> None:
         def fake_whisper_model(*_args, **kwargs):
             if kwargs.get("device") == "cuda":
-                raise RuntimeError("cublas64_12.dll cannot be loaded")
-            return FakeModel(kwargs.get("device", "cpu"))
+                raise RuntimeError("cuda load failed")
+            raise AssertionError("CPU fallback must not be attempted")
 
         with patch("core.transcriber.WhisperModel", side_effect=fake_whisper_model):
-            device, compute_type = self.transcriber._ensure_model("tiny", "cuda")
+            with self.assertRaises(RuntimeError) as ctx:
+                self.transcriber._ensure_model("tiny", "cuda")
 
-        self.assertEqual((device, compute_type), ("cpu", "int8"))
-        self.assertEqual(self.transcriber._model.model.device, "cpu")
+        self.assertIn("Whisper konnte nicht auf CUDA geladen werden", str(ctx.exception))
 
-    def test_transcribe_falls_back_to_cpu_when_cuda_inference_fails(self) -> None:
+    def test_transcribe_logs_actual_cuda_device_when_cuda_transcription_succeeds(self) -> None:
         fake_ctranslate2 = type(
             "FakeCTranslate2",
             (),
@@ -110,30 +106,51 @@ class WhisperTranscriberTests(unittest.TestCase):
                 self.model = type("InnerModel", (), {"device": "cuda"})()
 
             def transcribe(self, *_args, **_kwargs):
-                raise RuntimeError("Library cublas64_12.dll is not found or cannot be loaded.")
-
-        class FakeCpuModel:
-            def __init__(self) -> None:
-                self.model = type("InnerModel", (), {"device": "cpu"})()
-
-            def transcribe(self, *_args, **_kwargs):
                 return iter([type("Seg", (), {"text": "Hallo", "start": 0.0, "end": 1.0})()]), FakeInfo()
 
-        def fake_whisper_model(*_args, **kwargs):
-            if kwargs.get("device") == "cuda":
-                return FakeCudaModel()
-            return FakeCpuModel()
+        audio = np.ones(16000, dtype=np.float32)
+        progress_messages: list[str] = []
+
+        with patch("core.transcriber.ctranslate2", fake_ctranslate2), patch(
+            "core.transcriber.WhisperModel",
+            side_effect=lambda *args, **kwargs: FakeCudaModel(),
+        ):
+            result = self.transcriber.transcribe(
+                audio=audio,
+                execution_mode="cuda",
+                on_progress=progress_messages.append,
+            )
+
+        self.assertEqual(result.text, "Hallo")
+        self.assertEqual(self.transcriber._model.model.device, "cuda")
+        self.assertTrue(any("Whisper meldet aktives Gerät: cuda" in msg for msg in progress_messages))
+        self.assertTrue(any("Transkription läuft auf CUDA" in msg for msg in progress_messages))
+        self.assertTrue(any("abgeschlossen auf cuda" in msg.lower() for msg in progress_messages))
+
+    def test_transcribe_raises_when_cuda_transcription_fails(self) -> None:
+        fake_ctranslate2 = type(
+            "FakeCTranslate2",
+            (),
+            {"get_cuda_device_count": staticmethod(lambda: 1)},
+        )
+
+        class FakeCudaModel:
+            def __init__(self) -> None:
+                self.model = type("InnerModel", (), {"device": "cuda"})()
+
+            def transcribe(self, *_args, **_kwargs):
+                raise RuntimeError("CUDA inference failed")
 
         audio = np.ones(16000, dtype=np.float32)
 
         with patch("core.transcriber.ctranslate2", fake_ctranslate2), patch(
             "core.transcriber.WhisperModel",
-            side_effect=fake_whisper_model,
+            side_effect=lambda *args, **kwargs: FakeCudaModel(),
         ):
-            result = self.transcriber.transcribe(audio=audio, execution_mode="cuda")
+            with self.assertRaises(RuntimeError) as ctx:
+                self.transcriber.transcribe(audio=audio, execution_mode="cuda")
 
-        self.assertEqual(result.text, "Hallo")
-        self.assertEqual(self.transcriber._model.model.device, "cpu")
+        self.assertIn("Whisper-Transkription fehlgeschlagen auf cuda", str(ctx.exception))
 
     def test_available_execution_modes_includes_cuda_when_cuda_device_is_detected(self) -> None:
         fake_ctranslate2 = type(
