@@ -27,7 +27,10 @@ Windows-Desktop-App zum Aufnehmen, Verbessern und Transkribieren von Sprache mit
 - Die App ist als lokale Windows-Desktop-Anwendung mit Whisper-Transkription, optionaler Sprecher-Unterscheidung und dateibasiertem Speichern aufgebaut.
 - Die GUI-Zustandslogik wurde bereits teilweise zentralisiert; Recording-, Transcription- und Lade-Workflows sind in Hilfsmethoden aufgeteilt.
 - Die Speaker-Control-Logik ist syntaktisch bereinigt, `compileall` und die Testsuite laufen erfolgreich.
+- CUDA wird über die GPU-Erkennung und einen echten Whisper/CTranslate2-Modelltest diagnostiziert; zusätzlich zeigt die GUI einen CUDA-Diagnose-Dialog mit PATH-Hinweisen und Status an.
+
 - Offen bleiben die konzeptionelle Sprecher-UX und die Bewertung der heuristischen Diarisierung.
+
 
 ## Voraussetzungen
 
@@ -87,7 +90,13 @@ python -m unittest discover -s tests -v
 
 - Beim ersten Transkribieren wird das Whisper-Modell heruntergeladen (je nach Größe ca. 75–1500 MB).
 - Für Deutsch empfiehlt sich das Modell `small`.
-- Die Transkription läuft auf der CPU (`int8`). Über die App kann auch `auto` oder `cuda` gewählt werden.
+- Die Transkription läuft auf der CPU (`int8`). Über die App kann auch `auto` oder `cuda` gewählt werden, sofern die CUDA-12-Laufzeit auf Windows verfügbar ist.
+- Falls `cuda` nicht angezeigt wird oder der CUDA-Modus Probleme macht, nutze den neuen **CUDA prüfen**-Dialog in der GUI; er zeigt die GPU-Erkennung, relevante PATH-Einträge und den echten Whisper-Modelltest auf CUDA.
+
+- Wenn der Modelltest fehlschlägt, obwohl die GPU erkannt wird, verwende zunächst `auto` bzw. `cpu` oder prüfe die CUDA-Umgebung im Startprozess der App.
+
+
+
 
 - **Sprecher-Unterscheidung** arbeitet vollständig lokal und heuristisch auf Basis der Whisper-Segmente. Sie ist nützlich für Meetings/Interviews, aber nicht so präzise wie spezialisierte Diarisierungsmodelle.
 - **System-Audio**: Funktioniert unter Windows über WASAPI-Loopback. Wähle das Ausgabegerät, über das Teams/Browser Ton ausgibt (meist deine Lautsprecher oder Kopfhörer).

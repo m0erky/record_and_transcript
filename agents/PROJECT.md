@@ -38,7 +38,9 @@ Die Anwendung ist in wenige klar getrennte Schichten gegliedert:
 - Aktivieren und Deaktivieren von UI-Elementen in Abhängigkeit vom App-Zustand
 
 Die aktuelle GUI-Struktur ist funktional, aber weiterhin verzahnt. Für spätere Refactors bietet sich eine Trennung in Zustandsverwaltung, Aufnahme-/Transkriptions-Workflow und Anzeige-/Callback-Logik an.
-Der erste Schritt zur Zustandsentkopplung ist umgesetzt: `_set_busy(...)` arbeitet mit `_set_widgets_state(...)` und `_sync_recording_controls(...)`, um Busy-State und Aufnahmezustand zu trennen. Die Speaker-bezogenen Helfer `_speaker_settings(...)` und `_speaker_metadata(...)` sind ebenfalls zentralisiert.
+Der erste Schritt zur Zustandsentkopplung ist umgesetzt: `_set_busy(...)` arbeitet mit `_set_widgets_state(...)` und `_sync_recording_controls(...)`, um Busy-State und Aufnahmezustand zu trennen. Die Speaker-bezogenen Helfer `_speaker_settings(...)` und `_speaker_metadata(...)` sind ebenfalls zentralisiert. Die CUDA-Diagnose basiert jetzt auf GPU-Erkennung, relevanten PATH-Einträgen und einem echten Whisper/CTranslate2-Modelltest; zusätzlich gibt es einen CUDA-Diagnose-Dialog in der GUI.
+
+
 
 
 
@@ -258,14 +260,22 @@ Es gibt keine externe HTTP-API.
 - Die GUI-Zustandssteuerung ist teilweise zentralisiert; Recording-, Transcription- und Lade-Workflows sind bereits in Hilfsmethoden zerlegt.
 - Die Speaker-Control-Logik ist syntaktisch bereinigt; die nächste fachliche Aufgabe ist die Konzeption der Sprecher-UX und die Bewertung der heuristischen Diarisierung.
 - `app/gui.py` ist syntaktisch korrekt; `compileall` und die Testsuite laufen erfolgreich.
-- Die aktuelle Testsuite umfasst 4 Tests und wurde im aktuellen Workspace erfolgreich verifiziert.
+- Die CUDA-Diagnose ist jetzt auf einen echten Whisper/CTranslate2-Modelltest ausgerichtet und ergänzt um PATH-Hinweise aus dem laufenden App-Prozess.
+- Die GUI bietet zusätzlich einen CUDA-Diagnose-Dialog, der GPU-Erkennung, PATH-Hinweise und den Modelltest im laufenden App-Prozess anzeigt.
+
+- Die aktuelle Testsuite umfasst 6 Tests und wurde im aktuellen Workspace erfolgreich verifiziert.
+
+
 
 ## Statuskorrektur 2026-07-16
 
 - Der zuvor dokumentierte `IndentationError` in `app/gui.py` ist im aktuellen Workspace behoben.
 - `app/gui.py` ist syntaktisch korrekt; `python -m compileall` und `python -m unittest discover -s record_and_transcript\tests -v` laufen erfolgreich.
 - `tests/test_gui_smoke.py` ist vorhanden und prüft den Import von `app.gui` und `main`, ohne ein GUI-Fenster zu instanziieren.
+- Die CUDA-Diagnose verwendet jetzt einen echten Modelltest statt einer harten DLL-Prüfung; Fehlermeldungen sind damit besser auf den App-Prozess bezogen.
+
 - Der nächste inhaltliche Schritt liegt bei Sprecher-UX und Diarisierungsbewertung.
+
 
 
 

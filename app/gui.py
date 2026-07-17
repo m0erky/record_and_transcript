@@ -73,9 +73,14 @@ class AudioTranscriptionApp(ctk.CTk):
         header.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
 
         settings_frame = ctk.CTkFrame(self)
+
         settings_frame.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
+
         settings_frame.grid_columnconfigure(1, weight=1)
+
         settings_frame.grid_columnconfigure(3, weight=1)
+        settings_frame.grid_columnconfigure(4, weight=0)
+
 
         mic_label, self.device_menu = labeled_option_menu(
             settings_frame,
@@ -120,7 +125,16 @@ class AudioTranscriptionApp(ctk.CTk):
 
         self.execution_menu.grid(row=1, column=3, padx=12, pady=(0, 8), sticky="w")
 
+        self.cuda_diagnostic_button = ctk.CTkButton(
+            settings_frame,
+            text="CUDA prüfen",
+            command=self._show_cuda_diagnostics,
+            width=130,
+        )
+        self.cuda_diagnostic_button.grid(row=1, column=4, padx=12, pady=(0, 8), sticky="e")
+
         self.chk_speaker_diarization = labeled_checkbox(
+
             settings_frame,
             "Sprecher unterscheiden",
             default=False,
@@ -458,7 +472,56 @@ class AudioTranscriptionApp(ctk.CTk):
     def _set_status(self, message: str) -> None:
         self.status_label.configure(text=f"Status: {message}")
 
+    def _show_cuda_diagnostics(self) -> None:
+        report = WhisperTranscriber.cuda_diagnostic_report()
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("CUDA-Diagnose")
+        dialog.geometry("760x560")
+        dialog.minsize(680, 480)
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_rowconfigure(1, weight=1)
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+
+        title = ctk.CTkLabel(
+            dialog,
+            text="CUDA-Diagnose",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        )
+        title.grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
+
+        textbox = ctk.CTkTextbox(dialog, wrap="word")
+        textbox.grid(row=1, column=0, padx=16, pady=8, sticky="nsew")
+        textbox.insert("1.0", report)
+        textbox.configure(state="disabled")
+
+        button_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        button_row.grid(row=2, column=0, padx=16, pady=(8, 16), sticky="e")
+
+        def copy_report() -> None:
+            self.clipboard_clear()
+            self.clipboard_append(report)
+            self._set_status("CUDA-Diagnose in die Zwischenablage kopiert")
+
+        ctk.CTkButton(
+            button_row,
+            text="In Zwischenablage kopieren",
+            command=copy_report,
+            width=190,
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            button_row,
+            text="Schließen",
+            command=dialog.destroy,
+            width=120,
+        ).pack(side="left")
+
     def _set_widgets_state(self, widgets: list, state: str) -> None:
+
         for widget in widgets:
             widget.configure(state=state)
 

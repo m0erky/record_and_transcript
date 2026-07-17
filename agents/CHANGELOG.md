@@ -1,11 +1,20 @@
 # CHANGELOG.md
 
+## 2026-07-17 CUDA-Diagnose-Dialog
+
+- In `app/gui.py` gibt es jetzt einen modalen CUDA-Diagnose-Dialog mit Runtime-Details und Kopierfunktion.
+- Der Dialog zeigt den CTranslate2-Status, die gefundene GPU-Anzahl, relevante PATH-Einträge und einen echten Whisper-Modelltest direkt im App-Kontext an.
+
+- `python -m compileall record_and_transcript` wurde erfolgreich ausgeführt.
+- `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 6 Tests bestanden.
+
 ## 2026-07-16 GUI-Syntax-Cleanup
 
 - `app/gui.py` wurde syntaktisch bereinigt und die Speaker-Control-Hilfsmethoden bleiben konsistent eingebettet.
 - `python -m compileall -q record_and_transcript\main.py record_and_transcript\app record_and_transcript\core record_and_transcript\tests` wurde erfolgreich ausgeführt.
 - `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 4 Tests bestanden.
 - Die aktuelle Dokumentation wurde an den verifizierten Stand angepasst.
+
 
 ## 2026-07-16 Dokumentations-Synchronisation
 
@@ -53,10 +62,11 @@
 
 - `app/gui.py` ist im aktuellen Workspace syntaktisch korrekt; der zuvor dokumentierte `IndentationError` ist nicht mehr reproduzierbar.
 - `python -m compileall -q record_and_transcript\main.py record_and_transcript\app record_and_transcript\core record_and_transcript\tests` wurde erfolgreich ausgeführt.
-- `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 4 Tests bestanden.
+- `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 5 Tests bestanden.
 - `tests/test_gui_smoke.py` ist vorhanden und prüft Modulimporte, ohne ein Fenster zu instanziieren.
 - `PROJECT.md`, `TASKS.md`, `README.md` und `CHANGELOG.md` wurden an diesen aktuellen Status angepasst.
 - Der nächste inhaltliche Schritt ist die Sprecher-UX und die fachliche Bewertung der heuristischen Diarisierung.
+
 
 
 
@@ -105,10 +115,20 @@ Dieses Changelog dokumentiert die bisher erkannten Projektänderungen auf Basis 
 - GUI und Fachlogik sind in separate Module aufgeteilt.
 - Dokumentationsbereich `agents/` für Projektstatus, Aufgaben und Agent-Regeln eingeführt.
 
+## 2026-07-16 CUDA-Preflight
+
+- Die CUDA-Diagnose wurde von einer harten DLL-Prüfung auf einen echten Whisper/CTranslate2-Modelltest umgestellt.
+- Zusätzlich werden relevante PATH-Einträge aus dem App-Prozess angezeigt, damit Umgebungsunterschiede sichtbar werden.
+- Damit lassen sich Fehlermeldungen besser zwischen GPU-Erkennung, Prozessumgebung und tatsächlichem Modelltest unterscheiden.
+
+
 ## Aktueller Stand / bekannte Einschränkungen
 
 - `app/gui.py` ist im aktuellen Workspace syntaktisch korrekt.
 - Die restliche Kernlogik ist im Codebestand vorhanden und teilweise durch Tests abgedeckt.
 - Offen sind vor allem die Sprecherbearbeitung im UI und die Bewertung der heuristischen Sprecher-Diarisierung.
+- CUDA-Fehler auf Windows werden nun schon vor der Modellinitialisierung abgefangen, falls die nötigen DLLs fehlen.
+
+
 
 

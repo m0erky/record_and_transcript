@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from dataclasses import dataclass, field
 from typing import Callable
+
 
 import numpy as np
 from faster_whisper import WhisperModel
@@ -11,6 +14,7 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.fftpack import dct
 from scipy.signal import spectrogram
 from scipy.spatial.distance import pdist, squareform
+
 
 
 @dataclass
@@ -45,19 +49,108 @@ class TranscriptionResult:
 class WhisperTranscriber:
     MODEL_SIZES = ("tiny", "base", "small", "medium")
     EXECUTION_MODES = ("auto", "cpu", "cuda")
+    CUDA_RUNTIME_DLLS = ("cublas64_12.dll", "cublasLt64_12.dll", "cudart64_12.dll")
+    _cuda_dll_directory_paths_added: set[str] = set()
+
+    _cuda_dll_directory_handles: list[object] = []
 
     def __init__(self) -> None:
         self._model: WhisperModel | None = None
         self._loaded_config: tuple[str, str, str] | None = None
 
+
+
+    @classmethod
+    def _ensure_windows_cuda_dll_directories(cls) -> None:
+        if sys.platform != "win32" or not hasattr(os, "add_dll_directory"):
+            return
+
+        def register(path: str) -> None:
+            normalized_path = os.path.abspath(path)
+            path_key = normalized_path.lower()
+            if path_key in cls._cuda_dll_directory_paths_added:
+                return
+            if not os.path.isdir(normalized_path):
+                return
+            try:
+                handle = os.add_dll_directory(normalized_path)
+            except (AttributeError, FileNotFoundError, OSError):
+                return
+            cls._cuda_dll_directory_paths_added.add(path_key)
+            cls._cuda_dll_directory_handles.append(handle)
+
+        for entry in os.environ.get("PATH", "").split(os.pathsep):
+            if entry and any(token in entry.lower() for token in ("cuda", "cudnn", "nvidia")):
+                register(entry)
+
+        for env_name, env_value in os.environ.items():
+            if not env_value:
+                continue
+            if env_name.startswith("CUDA_PATH") or env_name in {"CUDNN_PATH", "NVIDIA_CUDA_TOOLKIT_PATH"}:
+                register(env_value)
+                for suffix in ("bin", "bin/x64", "lib", "lib/x64"):
+                    register(os.path.join(env_value, suffix))
+
+    @classmethod
+    def _cuda_device_issue(cls) -> str | None:
+        if ctranslate2 is None:
+            return "CTranslate2 ist nicht installiert."
+
+        try:
+            device_count = ctranslate2.get_cuda_device_count()
+        except Exception as exc:
+            return f"CUDA-Geräteprüfung fehlgeschlagen: {exc}"
+
+        if device_count <= 0:
+            return "Es wurde keine CUDA-fähige GPU für Whisper gefunden."
+
+        return None
+
+    @classmethod
+    def _cuda_model_smoke_test_issue(cls) -> str | None:
+        device_issue = cls._cuda_device_issue()
+        if device_issue is not None:
+            return device_issue
+
+        cls._ensure_windows_cuda_dll_directories()
+
+        try:
+            model = WhisperModel(
+                "tiny",
+                device="cuda",
+                compute_type="float16",
+                local_files_only=True,
+            )
+        except Exception as exc:
+            message = str(exc)
+            lowered = message.lower()
+            if any(
+                token in lowered
+                for token in (
+                    "local_files_only",
+                    "local files only",
+                    "no such file",
+                    "not found",
+                    "cache",
+                    "download",
+                )
+            ):
+                return (
+                    "Der CUDA-Modelltest konnte nicht ausgeführt werden, weil das lokale "
+                    f"'tiny'-Modell nicht im Cache gefunden wurde: {exc}"
+                )
+            return f"Whisper-Modelltest auf CUDA fehlgeschlagen: {exc}"
+
+        actual_device = getattr(getattr(model, "model", None), "device", None)
+        if actual_device != "cuda":
+            return f"Whisper-Modelltest lieferte Gerät {actual_device!r} statt 'cuda'."
+
+        return None
+
+
     @classmethod
     def gpu_available(cls) -> bool:
-        if ctranslate2 is None:
-            return False
-        try:
-            return ctranslate2.get_cuda_device_count() > 0
-        except Exception:
-            return False
+        return cls._cuda_device_issue() is None
 
     @classmethod
     def available_execution_modes(cls) -> list[str]:
@@ -65,6 +158,70 @@ class WhisperTranscriber:
         if cls.gpu_available():
             modes.append("cuda")
         return modes
+
+    @classmethod
+    def cuda_diagnostic_report(cls) -> str:
+        lines = [
+            "CUDA-Diagnose",
+            f"Plattform: {sys.platform}",
+            f"CTranslate2: {'installiert' if ctranslate2 is not None else 'nicht installiert'}",
+        ]
+
+        if ctranslate2 is not None:
+            try:
+                device_count = ctranslate2.get_cuda_device_count()
+            except Exception as exc:
+                lines.append(f"CUDA-Geräteprüfung: fehlgeschlagen ({exc})")
+            else:
+                lines.append(f"Gefundene CUDA-Geräte: {device_count}")
+
+        if sys.platform == "win32":
+            path_entries = [
+                entry.strip()
+                for entry in os.environ.get("PATH", "").split(os.pathsep)
+                if entry.strip()
+            ]
+            cuda_entries = [
+                entry
+                for entry in path_entries
+                if any(token in entry.lower() for token in ("cuda", "cudnn", "nvidia"))
+            ]
+            if cuda_entries:
+                lines.append("Relevante PATH-Einträge:")
+                for entry in cuda_entries[:8]:
+                    lines.append(f"  - {entry}")
+                if len(cuda_entries) > 8:
+                    lines.append(f"  - ... ({len(cuda_entries) - 8} weitere Einträge)")
+            else:
+                lines.append("Relevante PATH-Einträge: keine CUDA-/cuDNN-Pfade gefunden")
+        else:
+            lines.append("Relevante PATH-Einträge: nicht geprüft (kein Windows)")
+
+
+
+
+        smoke_test_issue = cls._cuda_model_smoke_test_issue()
+
+        if smoke_test_issue is None:
+            lines.append("Whisper-Modelltest: erfolgreich (device='cuda')")
+            lines.append("Status: CUDA ist für Whisper nutzbar.")
+            lines.append("Empfehlung: Der Modus 'cuda' kann verwendet werden.")
+        else:
+            lines.append("Whisper-Modelltest: fehlgeschlagen")
+            if "lokale 'tiny'-Modell" in smoke_test_issue or "lokales 'tiny'-Modell" in smoke_test_issue:
+                lines.append("Status: CUDA-Modelltest konnte nicht vollständig ausgeführt werden.")
+            else:
+                lines.append("Status: CUDA ist in dieser App nicht nutzbar.")
+            lines.append(f"Details: {smoke_test_issue}")
+            lines.append(
+                "Empfehlung: Prüfe den echten Whisper-Modelltest in genau dem Prozess, der die App startet, "
+                "oder verwende 'auto' bzw. 'cpu'."
+            )
+
+
+        return "\n".join(lines)
+
+
 
     def transcribe(
         self,
@@ -91,7 +248,7 @@ class WhisperTranscriber:
 
         if on_progress:
             on_progress(
-                f"Transkription l?uft ({resolved_device.upper()}, {resolved_compute_type})..."
+                f"Transkription läuft ({resolved_device.upper()}, {resolved_compute_type})..."
             )
 
         whisper_segments, info = self._model.transcribe(
@@ -121,6 +278,7 @@ class WhisperTranscriber:
             duration=duration,
             segments=transcript_segments,
         )
+
 
     def _collect_transcript_segments(self, whisper_segments) -> list[TranscriptSegment]:
         transcript_segments: list[TranscriptSegment] = []
@@ -552,7 +710,6 @@ class WhisperTranscriber:
         return f"{minutes:02d}:{secs:02d}"
 
     def _ensure_model(
-
         self,
         model_size: str,
         execution_mode: str = "auto",
@@ -569,6 +726,9 @@ class WhisperTranscriber:
                 f"Modell '{model_size}' wird auf {requested_device.upper()} geladen..."
             )
 
+        if requested_device == "cuda":
+            self._ensure_windows_cuda_dll_directories()
+
         try:
             self._model = WhisperModel(
                 model_size,
@@ -578,24 +738,32 @@ class WhisperTranscriber:
             self._loaded_config = requested_config
             return requested_device, requested_compute_type
         except Exception as exc:
-            if execution_mode != "auto" or requested_device != "cuda":
+            if requested_device != "cuda":
                 raise RuntimeError(
                     f"Whisper konnte nicht auf {requested_device.upper()} geladen werden: {exc}"
                 ) from exc
 
             if on_progress:
-                on_progress("CUDA nicht verfügbar/fehlgeschlagen, wechsle auf CPU...")
+                on_progress("CUDA fehlgeschlagen, wechsle auf CPU...")
 
             fallback_device, fallback_compute_type = "cpu", "int8"
-            self._model = WhisperModel(
-                model_size,
-                device=fallback_device,
-                compute_type=fallback_compute_type,
-            )
+            try:
+                self._model = WhisperModel(
+                    model_size,
+                    device=fallback_device,
+                    compute_type=fallback_compute_type,
+                )
+            except Exception as cpu_exc:
+                raise RuntimeError(
+                    "Whisper konnte weder auf CUDA noch auf CPU geladen werden: "
+                    f"CUDA-Fehler: {exc}; CPU-Fehler: {cpu_exc}"
+                ) from cpu_exc
+
             self._loaded_config = (model_size, fallback_device, fallback_compute_type)
             return fallback_device, fallback_compute_type
 
     def _resolve_execution_mode(self, execution_mode: str) -> tuple[str, str]:
+
         mode = execution_mode.lower().strip()
         if mode not in self.EXECUTION_MODES:
             raise ValueError(f"Unbekannter Rechenmodus: {execution_mode}")
@@ -604,9 +772,14 @@ class WhisperTranscriber:
             return "cpu", "int8"
 
         if mode == "cuda":
-            if not self.gpu_available():
-                raise RuntimeError("Es wurde keine CUDA-fähige GPU für Whisper gefunden.")
+            issue = self._cuda_device_issue()
+            if issue is not None:
+                raise RuntimeError(
+                    "CUDA-Modus ist nicht verfügbar: "
+                    f"{issue}"
+                )
             return "cuda", "float16"
+
 
         if self.gpu_available():
             return "cuda", "float16"
@@ -614,6 +787,7 @@ class WhisperTranscriber:
 
 
 __all__ = [
+
     "SpeechRegion",
     "TranscriptSegment",
     "TranscriptionResult",

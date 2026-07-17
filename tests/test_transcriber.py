@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -77,6 +78,62 @@ class WhisperTranscriberTests(unittest.TestCase):
         self.assertEqual(merged[0].text, "Hallo Welt")
         self.assertEqual(merged[0].speaker, "Sprecher 1")
         self.assertEqual(merged[1].speaker, "Sprecher 2")
+
+    def test_ensure_model_falls_back_to_cpu_when_cuda_model_load_fails(self) -> None:
+        class FakeModel:
+            def __init__(self, device: str) -> None:
+                self.model = type("InnerModel", (), {"device": device})()
+
+        def fake_whisper_model(*_args, **kwargs):
+            if kwargs.get("device") == "cuda":
+                raise RuntimeError("cublas64_12.dll cannot be loaded")
+            return FakeModel(kwargs.get("device", "cpu"))
+
+        with patch("core.transcriber.WhisperModel", side_effect=fake_whisper_model):
+            device, compute_type = self.transcriber._ensure_model("tiny", "cuda")
+
+        self.assertEqual((device, compute_type), ("cpu", "int8"))
+        self.assertEqual(self.transcriber._model.model.device, "cpu")
+
+    def test_available_execution_modes_includes_cuda_when_cuda_device_is_detected(self) -> None:
+        fake_ctranslate2 = type(
+            "FakeCTranslate2",
+            (),
+            {"get_cuda_device_count": staticmethod(lambda: 1)},
+        )
+
+        with patch("core.transcriber.ctranslate2", fake_ctranslate2):
+            modes = WhisperTranscriber.available_execution_modes()
+
+        self.assertEqual(modes, ["auto", "cpu", "cuda"])
+
+    def test_cuda_diagnostic_report_uses_whisper_model_smoke_test(self) -> None:
+        fake_ctranslate2 = type(
+            "FakeCTranslate2",
+            (),
+            {"get_cuda_device_count": staticmethod(lambda: 1)},
+        )
+
+        class FakeModel:
+            def __init__(self) -> None:
+                self.model = type("InnerModel", (), {"device": "cuda"})()
+
+        with patch("core.transcriber.ctranslate2", fake_ctranslate2), patch(
+            "core.transcriber.WhisperModel",
+            side_effect=lambda *args, **kwargs: FakeModel(),
+        ), patch("core.transcriber.sys.platform", "win32"), patch.dict(
+            "core.transcriber.os.environ",
+            {"PATH": r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin"},
+            clear=False,
+        ):
+            report = WhisperTranscriber.cuda_diagnostic_report()
+
+        self.assertIn("CUDA-Diagnose", report)
+        self.assertIn("Gefundene CUDA-Geräte: 1", report)
+        self.assertIn("Whisper-Modelltest", report)
+        self.assertIn("CUDA ist für Whisper nutzbar", report)
+        self.assertNotIn("nicht ladbar", report)
+        self.assertIn(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin", report)
 
 
 if __name__ == "__main__":

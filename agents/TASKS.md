@@ -4,10 +4,14 @@
 
 - Task 1 ist abgeschlossen: `app/gui.py` wurde analysiert und die großen Verantwortlichkeiten sind markiert.
 - Task 2 ist abgeschlossen: Busy-/State-Handling ist zentralisiert.
-- Die aktuelle Testsuite und der GUI-Smoke-Test laufen erfolgreich.
+- Die aktuelle Testsuite und der GUI-Smoke-Test laufen erfolgreich; die Suite umfasst jetzt 6 Tests.
+
 - Task 3 ist abgeschlossen: Recording-, Transcription- und UI-Update-Logik sind in Hilfsmethoden zerlegt.
 - Task 4 ist syntaktisch bereinigt und verifiziert; die konzeptionelle Sprecherbearbeitung bleibt offen.
 - Nächster Fokus: Sprecher-UX konzipieren und heuristische Diarisierung bewerten.
+- CUDA-Diagnose für die Transkription ist umgesetzt; in der GUI gibt es zusätzlich einen CUDA-Diagnose-Dialog mit Modelltest.
+
+
 
 
 
@@ -37,6 +41,11 @@ Die Sprecherbearbeitung soll im UI klar beschrieben werden, bevor weitere GUI-Re
 - [x] GUI-Smoke-Test und Transcriber-Tests nach Änderungen ausführen.
 - [x] `compileall` bzw. Importprüfung zur Verifikation ausführen.
 - [x] `PROJECT.md`, `CHANGELOG.md` und `TASKS.md` nach Abschluss aktualisieren.
+- [x] CUDA-Diagnose-Dialog in der GUI implementieren und verifizieren.
+
+- [x] CUDA-Preflight für die Transkription implementieren.
+
+
 
 
 ### Definition of Done
@@ -73,6 +82,9 @@ Die Sprecherbearbeitung soll im UI klar beschrieben werden, bevor weitere GUI-Re
 - `app/gui.py` ist im aktuellen Workspace syntaktisch korrekt; `python -m compileall` und `python -m unittest discover -s record_and_transcript\tests -v` laufen erfolgreich.
 - `tests/test_gui_smoke.py` ist vorhanden und importgeprüft `app.gui` sowie `main`, ohne ein GUI-Fenster zu instanziieren.
 - Der Speaker-Control-Refactor ist syntaktisch bereinigt und verifiziert; die Sprecher-UX-Arbeit bleibt als nächster konzeptioneller Schritt offen.
+- CUDA wird in der GUI anhand der GPU-Erkennung angeboten; die Diagnose selbst prüft zusätzlich einen echten Whisper-Modelltest.
+
+
 - Build-/Artefaktpflege geklärt: `build/`, `dist/` und andere generierte Artefakte bleiben unversioniert.
 - Git-Hygiene hergestellt: versehentlich versionierte Bytecode-Caches (`__pycache__/`, `*.pyc`) wurden aus dem Git-Index entfernt.
 - Dokumentation des aktuellen Projektzustands in `PROJECT.md`, `README.md`, `TASKS.md`, `CHANGELOG.md` und `AGENT_RULES.md` aktualisiert.
@@ -80,9 +92,12 @@ Die Sprecherbearbeitung soll im UI klar beschrieben werden, bevor weitere GUI-Re
 
 ## Statuskorrektur 2026-07-16
 
-- `tests/test_gui_smoke.py` ist vorhanden und die Testsuite läuft mit 4 bestandenen Tests.
+- `tests/test_gui_smoke.py` ist vorhanden und die Testsuite läuft mit 5 bestandenen Tests.
 - Task 2 und Task 3 sind erledigt; der nächste fachliche Schritt ist die Sprecher-UX und die Bewertung der heuristischen Diarisierung.
 - Der Speaker-Control-Refactor ist syntaktisch bereinigt und verifiziert.
+- CUDA-Fehler auf Windows werden jetzt über den realen Modelltest und die App-Umgebung diagnostiziert, statt über eine reine WinDLL-Prüfung.
+
+
 
 
 
