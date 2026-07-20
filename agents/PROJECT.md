@@ -2,156 +2,49 @@
 
 ## Projektziel
 
-Die Anwendung ist eine lokale Windows-Desktop-App zur Aufnahme, Verbesserung, Wiedergabe, Transkription und optionalen Sprecher-Unterscheidung von Audio.
+Die Anwendung ist eine lokale Windows-Desktop-App für Aufnahme, Audioverbesserung, Wiedergabe, Whisper-Transkription und optionale Sprecher-Unterscheidung.
 
-Ziel ist ein möglichst einfacher End-to-End-Workflow:
+Der geplante End-to-End-Workflow ist bewusst einfach gehalten:
 1. Audio aufnehmen oder laden
 2. optional verbessern
-3. mit Whisper transkribieren
+3. lokal mit Whisper transkribieren
 4. optional Sprecher markieren
-5. als TXT/DOCX und Session-Dateien speichern
+5. Ergebnisse als TXT, DOCX und Session-Dateien speichern
 
-Die Verarbeitung erfolgt lokal auf dem Rechner des Nutzers. Es gibt keine externe Web-API und keine Cloud-Abhängigkeit für die Kernfunktionen.
+Die Kernverarbeitung bleibt lokal auf dem Rechner des Nutzers. Für die Hauptfunktionen ist keine externe Web-API vorgesehen.
 
 ## Architektur
 
-Die Anwendung ist in wenige klar getrennte Schichten gegliedert:
-
-### Einstiegsschicht
+### Einstieg
 - `main.py` startet die GUI.
 
-### Präsentationsschicht
-- `app/gui.py` enthält das Hauptfenster, die Bedienlogik und die UI-Steuerung.
-- `app/waveform.py` zeichnet die Wellenform und die aktuelle Position.
-- `app/widgets.py` stellt kleine UI-Hilfsfunktionen bereit.
-
-### GUI-Verantwortlichkeiten und Analyse
-`app/gui.py` ist aktuell der zentrale Orchestrator der Anwendung und bündelt mehrere Aufgaben:
-- Initialisierung von Recorder, Player, Processor, Transcriber und Storage
-- Aufbau der gesamten Oberfläche
-- Geräte- und Loopback-Refresh
-- Aufnahme starten, pausieren, stoppen und Datei laden
-- Audio-Verbesserung manuell oder automatisch vor der Transkription
-- Transkriptionsstart, Fortschrittsanzeige und Fehlerbehandlung
-- Wiedergabesteuerung inklusive Waveform-Synchronisation
-- Speichern und Exportieren von Aufnahme- und Transkriptartefakten
-- Aktivieren und Deaktivieren von UI-Elementen in Abhängigkeit vom App-Zustand
-
-Die aktuelle GUI-Struktur ist funktional, aber weiterhin verzahnt. Für spätere Refactors bietet sich eine Trennung in Zustandsverwaltung, Aufnahme-/Transkriptions-Workflow und Anzeige-/Callback-Logik an.
-Der erste Schritt zur Zustandsentkopplung ist umgesetzt: `_set_busy(...)` arbeitet mit `_set_widgets_state(...)` und `_sync_recording_controls(...)`, um Busy-State und Aufnahmezustand zu trennen. Die Speaker-bezogenen Helfer `_speaker_settings(...)` und `_speaker_metadata(...)` sind ebenfalls zentralisiert. Die CUDA-Diagnose basiert auf GPU-Erkennung, relevanten PATH-Einträgen und einem echten Whisper/CTranslate2-Modelltest; zusätzlich gibt es einen CUDA-Diagnose-Dialog in der GUI. Auf Windows registriert der Transcriber vor Whisper-Aufrufen CUDA-DLL-Verzeichnisse aus typischen Installationspfaden und aus Prozessvariablen, damit Laufzeitbibliotheken wie `cublas64_12.dll` gefunden werden können.
-Die Whisper-Transkription protokolliert den tatsächlich verwendeten Rechenmodus über `on_progress(...)` in der GUI, statt ein separates Logfile zu schreiben. Es gibt bewusst keinen automatischen CPU-Fallback im Transkriptionspfad; Fehler werden direkt an die Oberfläche gemeldet. CUDA-/Whisper-Exceptions werden im Standard-Fehlerdialog unverändert angezeigt, damit die Ursache unmittelbar sichtbar ist.
-
-
-
-
-
-
-
-
+### Präsentation / UI
+- `app/gui.py` enthält Hauptfenster, Bedienlogik und Zustandssteuerung.
+- `app/waveform.py` zeichnet die Wellenform und die Abspielposition.
+- `app/widgets.py` bündelt kleine UI-Hilfen.
 
 ### Fachlogik
 - `core/audio_recorder.py` nimmt Mikrofon- und optional System-Audio auf.
 - `core/audio_processor.py` verbessert Audio vor der Transkription.
 - `core/audio_player.py` spielt Audio ab und steuert Play/Pause/Seek.
-- `core/transcriber.py` lädt Whisper, transkribiert Audio und optional führt eine heuristische Sprecher-Diarisierung aus. Dabei werden der aktive Whisper-Rechenmodus und der Abschlussstatus über Progress-Meldungen an die GUI weitergegeben.
-
-- `core/storage.py` speichert Session-Dateien und Exporte.
-- `core/docx_exporter.py` erzeugt Word-Dokumente.
+- `core/transcriber.py` lädt Whisper, transkribiert Audio und erzeugt optional heuristische Sprecherzuordnungen.
+- `core/storage.py` verwaltet Sessions und Artefakte.
+- `core/docx_exporter.py` erzeugt DOCX-Dateien.
 
 ### Tests
-- `tests/test_gui_smoke.py` prüft den Import von `app.gui` und `main`, ohne ein GUI-Fenster zu öffnen.
-- `tests/test_transcriber.py` prüft die Transcriber-Logik, Speech-Region-Erkennung und Segment-Merging.
+- `tests/test_gui_smoke.py` prüft Modulimporte ohne Fenster.
+- `tests/test_transcriber.py` deckt Kernpfade der Transcriber- und Sprecherlogik ab.
 
+## Datenmodell und Speicherung
 
-### Build-/Artefaktbereich
-- `build/` und `dist/` enthalten Paketierungsartefakte, vermutlich aus PyInstaller-Builds.
-- Generierte Artefakte, Bytecode-Caches und lokale Laufzeitdateien werden ueber `.gitignore` ausgeschlossen.
-
-### Git-/Repository-Hygiene
-- Versioniert werden sollen Quellcode, Tests, Dokumentation, `.spec`-Buildbeschreibungen und Lizenzdateien.
-- Nicht versioniert werden sollen `__pycache__/`, `*.pyc`, `build/`, `dist/`, `output/`, virtuelle Umgebungen, Editor-Metadaten und sonstige temporaere Dateien.
-- Vorher versehentlich versionierte Bytecode-Caches wurden aus dem Git-Index entfernt.
-
-
-## Technologien
-
-### Sprache und Laufzeit
-- Python 3.10+ laut README
-- im Build-Artefakt ist Python 3.13 erkennbar
-
-### GUI
-- `customtkinter`
-- `tkinter`
-
-### Audio
-- `sounddevice`
-- `soundfile`
-- optional `soundcard` für Loopback-Erkennung unter Windows
-- `numpy`
-- `scipy`
-- `noisereduce`
-
-### Transkription
-- `faster-whisper`
-- `ctranslate2`
-
-### Export
-- `python-docx`
-
-### Packaging / Runtime-Artefakte
-- PyInstaller-ähnliche Build-Ausgabe ist im Repository vorhanden (`AudioTranskription.spec`, `AudioTranskription-OneFile.spec`)
-
-## Verzeichnisstruktur
-
-```text
-record_and_transcript/
-├── main.py
-├── README.md
-├── requirements.txt
-├── LICENSE
-├── agents/
-│   ├── PROJECT.md
-│   ├── TASKS.md
-│   ├── CHANGELOG.md
-│   └── AGENT_RULES.md
-├── app/
-│   ├── gui.py
-│   ├── waveform.py
-│   ├── widgets.py
-│   └── __init__.py
-├── core/
-│   ├── audio_player.py
-│   ├── audio_processor.py
-│   ├── audio_recorder.py
-│   ├── docx_exporter.py
-│   ├── storage.py
-│   ├── transcriber.py
-│   └── __init__.py
-├── tests/
-│   ├── test_gui_smoke.py
-│   └── test_transcriber.py
-
-├── output/
-│   └── sessions/
-├── build/
-├── dist/
-└── *.spec
-```
-
-## Datenbankdesign
-
-Es gibt aktuell **keine Datenbank**.
-
-Stattdessen werden Daten dateibasiert gespeichert:
+Es gibt keine Datenbank. Stattdessen werden Sessions dateibasiert gespeichert:
 - Rohaufnahme als WAV
 - verbesserte Aufnahme als WAV
 - Transkript als TXT
 - Transkript als DOCX
 - Session-Ordner unter `output/sessions/<Zeitstempel>/`
 
-### Datenmodell in der Anwendung
-
-Wichtige Dataclasses sind:
+Wichtige Dataclasses im Projekt sind:
 - `InputDevice`
 - `RecordingConfig`
 - `EnhancementOptions`
@@ -161,138 +54,45 @@ Wichtige Dataclasses sind:
 - `TranscriptionResult`
 - `SessionPaths`
 
-### Dateispeicherstruktur einer Session
+## Technologische Entscheidungen
 
-```text
-output/sessions/<YYYY-MM-DD_HH-MM-SS>/
-├── recording_raw.wav
-├── recording_enhanced.wav
-├── transcript.txt
-└── transcript.docx
-```
+1. **Offline-first Whisper-Verarbeitung**
+   - Keine Cloud-Abhängigkeit für die Kernfunktion.
+   - Datenschutz und Kontrolle bleiben lokal.
 
-## APIs
+2. **Heuristische Sprecher-Diarisierung**
+   - Leichtgewichtig und lokal umsetzbar.
+   - Für präzise Mehrsprecher-Szenarien vermutlich nur eingeschränkt ausreichend.
 
-Es gibt keine externe HTTP-API.
+3. **Dateibasierte Sessions statt Datenbank**
+   - Weniger Komplexität.
+   - Gut geeignet für einen Desktop-Einzelplatz-Workflow.
 
-### Interne Kern-APIs
+4. **Windows-Fokus**
+   - System-Audio über WASAPI-Loopback wird speziell unter Windows unterstützt.
+   - CUDA-Diagnose und DLL-Registrierung sind Windows-spezifisch umgesetzt.
 
-#### `AudioRecorder`
-- `list_input_devices()`
-- `list_loopback_devices()`
-- `start(config)`
-- `pause()` / `resume()`
-- `stop()`
-- `load_audio_file(path, target_sample_rate)`
-- `get_audio()`
+5. **GUI-gesteuerter Workflow**
+   - Die Anwendung ist als Desktop-App statt als CLI oder Server gedacht.
 
-#### `AudioProcessor`
-- `enhance(audio, options)`
+## Aktueller technischer Stand
 
-#### `AudioPlayer`
-- `load(audio)`
-- `play()` / `pause()` / `stop()`
-- `seek(seconds)` / `skip(seconds)`
-- Callback-API für Positions- und Ende-Events
+- Die GUI ist funktionsfähig und strukturell bereits teilweise entkoppelt.
+- Busy-/State-Handling wurde in Hilfsfunktionen aufgeteilt.
+- Recording-, Transcription- und Ladeflüsse sind in kleinere Methoden zerlegt.
+- Die Whisper-Transkription meldet den aktiven Rechenmodus über GUI-Statusmeldungen.
+- Es gibt einen CUDA-Diagnose-Dialog mit GPU-Erkennung, PATH-Hinweisen und echtem Modelltest.
+- Unter Windows registriert der Transcriber CUDA-DLL-Verzeichnisse vor Whisper-Aufrufen automatisch.
+- CUDA- und Whisper-Fehler werden mit der echten Backend-Exception angezeigt.
+- Ein separates Logfile ist bewusst nicht vorgesehen; die Oberfläche bleibt die primäre Rückmeldung.
+- Die aktuelle Testsuite umfasst 10 Tests und wurde im Workspace verifiziert.
 
-#### `WhisperTranscriber`
-- `transcribe(...)`
-- interne Hilfsfunktionen für Segment-Erzeugung, Speaker-Diarisierung, Clustering und Modellverwaltung
+## Bekannte offene Punkte
 
-#### `SessionStorage`
-- `create_session()`
-- `save_wav(...)`
-- `save_transcript_txt(...)`
-- `save_transcript_docx(...)`
-- `save_all(...)`
-
-#### `export_to_docx(...)`
-- erzeugt ein DOCX-Dokument aus Text und Metadaten
-
-## Deployment-Konzept
-
-### Lokaler Betrieb
-1. Python-Umgebung erstellen
-2. Abhängigkeiten aus `requirements.txt` installieren
-3. `python main.py` ausführen
-
-### Typischer Windows-Workflow
-- Mikrofon auswählen
-- optional System-Audio aktivieren (WASAPI/Loopback)
-- Whisper-Modell wählen
-- optional Audio verbessern
-- transkribieren und exportieren
-
-### Paketierung
-- Im Repository sind `.spec`-Dateien sowie `build/` und `dist/` vorhanden.
-- Das deutet auf einen PyInstaller-Workflow hin.
-- Das Auslieferungsartefakt ist eine Desktop-EXE für Windows.
-
-### Betriebsannahmen
-- Fokus auf Windows 10/11
-- Offline-/Local-First-Verarbeitung
-- Modell-Download beim ersten Start bzw. ersten Transkriptionslauf
-
-## Bekannte technische Entscheidungen
-
-1. **Offline-first Whisper-Transkription**
-   - Kein externer Transkriptionsdienst.
-   - Vorteil: Datenschutz, geringe Abhängigkeiten, lokale Kontrolle.
-
-2. **Heuristische Sprecher-Diarisierung statt Spezialmodell**
-   - Aktuell wird Sprecherzuordnung aus Speech-Regionen, Embeddings und Clustering abgeleitet.
-   - Das ist leichtgewichtig, aber weniger präzise als ein dediziertes Diarisierungsmodell.
-
-3. **Dateibasierte Speicherung statt Datenbank**
-   - Sitzungen werden direkt im Dateisystem abgelegt.
-   - Das reduziert Komplexität und passt zum Desktop-/Einzelplatz-Szenario.
-
-4. **Windows-spezifischer System-Audio-Support**
-   - Loopback-Aufnahme wird unter Windows priorisiert.
-   - Andere Plattformen haben nur eingeschränkten oder keinen Support.
-
-5. **Lokale Audio-Verbesserung vor der Transkription**
-   - Normalisierung, Hochpassfilter und Rauschreduktion werden lokal durchgeführt.
-
-6. **UI-getriebene Workflow-Steuerung**
-   - Die App ist bewusst als Desktop-GUI aufgebaut und nicht als CLI-/Server-Anwendung.
-
-## Aktueller technischer Status
-
-- Die Transcriber-Logik ist vorhanden und testbar.
-- Es existieren Unit-Tests für die Sprecherlogik und ein GUI-Smoke-Test für die Modulimporte.
-- Die Repository-Hygiene ist aufgeräumt: generierte Bytecode-Caches sind aus dem Git-Index entfernt und werden künftig ignoriert.
-- Build-/Runtime-Artefakte bleiben ueber `.gitignore` aus der Versionierung heraus.
-- Die GUI-Zustandssteuerung ist teilweise zentralisiert; Recording-, Transcription- und Lade-Workflows sind bereits in Hilfsmethoden zerlegt.
-- Die Speaker-Control-Logik ist syntaktisch bereinigt; die nächste fachliche Aufgabe ist die Konzeption der Sprecher-UX und die Bewertung der heuristischen Diarisierung.
-- `app/gui.py` ist syntaktisch korrekt; `compileall` und die Testsuite laufen erfolgreich.
-- Die CUDA-Diagnose ist auf einen echten Whisper/CTranslate2-Modelltest ausgerichtet und ergänzt um PATH-Hinweise aus dem laufenden App-Prozess.
-- Die GUI bietet zusätzlich einen CUDA-Diagnose-Dialog, der GPU-Erkennung, PATH-Hinweise und den Modelltest im laufenden App-Prozess anzeigt.
-- Die laufende Whisper-Transkription meldet den aktiven Rechenmodus in der Statuszeile; es gibt kein separates Logfile.
-- Auf Windows registriert der Transcriber CUDA-DLL-Verzeichnisse automatisch, damit Laufzeitbibliotheken wie `cublas64_12.dll` gefunden werden.
-- CUDA-bezogene Laufzeitfehler werden im Standard-Dialog mit der tatsächlichen Exception angezeigt; der technische Modelltest bleibt im CUDA-Diagnose-Dialog verfügbar.
-- Die aktuelle Testsuite umfasst 10 Tests und wurde im aktuellen Workspace erfolgreich verifiziert.
-
-
-
-
-
-
-## Statuskorrektur 2026-07-16
-
-- Der zuvor dokumentierte `IndentationError` in `app/gui.py` ist im aktuellen Workspace behoben.
-- `app/gui.py` ist syntaktisch korrekt; `python -m compileall` und `python -m unittest discover -s record_and_transcript\tests -v` laufen erfolgreich.
-- `tests/test_gui_smoke.py` ist vorhanden und prüft den Import von `app.gui` und `main`, ohne ein GUI-Fenster zu instanziieren.
-- Die CUDA-Diagnose verwendet einen echten Modelltest statt einer harten DLL-Prüfung; Fehlermeldungen sind damit besser auf den App-Prozess bezogen.
-- Die Transkriptions-Statusmeldungen zeigen den von Whisper gemeldeten Rechenmodus, damit CUDA-Nutzung im laufenden App-Prozess besser nachvollziehbar ist.
-- CUDA-Laufzeitfehler werden im Standard-Fehlerdialog mit den echten Backend-Details angezeigt, damit die Ursache direkt nachvollziehbar ist.
-- Auf Windows werden CUDA-DLL-Verzeichnisse vor Whisper-Aufrufen automatisch registriert, um typische Laufzeit-DLLs wie `cublas64_12.dll` auflösbar zu machen.
-
-
-
-
-
-- Der nächste inhaltliche Schritt liegt bei Sprecher-UX und Diarisierungsbewertung.
+- Sprecher-UX ist noch offen und soll konzeptionell und technisch weiter ausgearbeitet werden.
+- Die heuristische Sprecher-Diarisierung ist noch nicht fachlich abschließend bewertet.
+- Eine mögliche Erweiterung ist ein optionales Debug-Log für Supportfälle.
+- Weitere mögliche Ausbauschritte sind Session-Historie, Modellverwaltung und zusätzliche Exportformate.
 
 
 

@@ -1,146 +1,80 @@
 # CHANGELOG.md
 
-## 2026-07-17 CUDA-Transkriptionslogging
+## 2026-07-17
 
-- Die Whisper-Transkription meldet den tatsächlich verwendeten Rechenmodus jetzt über `on_progress(...)` an die GUI-Statuszeile.
-- Für CUDA-Transkription wird der von Whisper gemeldete aktive Modus sichtbar gemacht, statt auf einen separaten Logfile-Workflow zu setzen.
-- Die Transkription löst keine automatische CPU-Umschaltung mehr aus; Fehler werden direkt an die Oberfläche gemeldet.
-- CUDA-bezogene Laufzeitfehler werden im Standarddialog jetzt mit der tatsächlichen Whisper-/CUDA-Exception angezeigt, damit die Ursache direkt sichtbar ist.
-- Auf Windows werden CUDA-DLL-Verzeichnisse aus typischen Installationspfaden und Prozessvariablen automatisch registriert, damit Bibliotheken wie `cublas64_12.dll` auflösbar sind.
+### CUDA-Transkriptionslogging
 
+- Die Whisper-Transkription meldet den tatsächlich verwendeten Rechenmodus über `on_progress(...)` an die GUI-Statuszeile.
+- Die App verwendet keinen separaten Logfile-Workflow für Transkriptionsstatus.
+- Fehler werden direkt an die Oberfläche gemeldet; CUDA-/Whisper-Exceptions bleiben sichtbar.
+- Unter Windows werden CUDA-DLL-Verzeichnisse aus typischen Installationspfaden und Prozessvariablen automatisch registriert.
 - `python -m compileall record_and_transcript` wurde erfolgreich ausgeführt.
 - `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 10 Tests bestanden.
 
+### CUDA-Diagnose-Dialog
+- In `app/gui.py` existiert ein modaler CUDA-Diagnose-Dialog mit Runtime-Details und Kopierfunktion.
+- Der Dialog zeigt CTranslate2-Status, GPU-Anzahl, relevante PATH-Einträge und einen echten Whisper-Modelltest im App-Kontext an.
 
+## 2026-07-16
 
-## 2026-07-17 CUDA-Diagnose-Dialog
-
-- In `app/gui.py` gibt es weiterhin einen modalen CUDA-Diagnose-Dialog mit Runtime-Details und Kopierfunktion.
-- Der Dialog zeigt den CTranslate2-Status, die gefundene GPU-Anzahl, relevante PATH-Einträge und einen echten Whisper-Modelltest direkt im App-Kontext an.
-
-
-## 2026-07-16 GUI-Syntax-Cleanup
-
-- `app/gui.py` wurde syntaktisch bereinigt und die Speaker-Control-Hilfsmethoden bleiben konsistent eingebettet.
+### GUI-Syntax-Cleanup
+- `app/gui.py` wurde syntaktisch bereinigt.
 - `python -m compileall -q record_and_transcript\main.py record_and_transcript\app record_and_transcript\core record_and_transcript\tests` wurde erfolgreich ausgeführt.
 - `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 4 Tests bestanden.
-- Die aktuelle Dokumentation wurde an den verifizierten Stand angepasst.
 
+### Dokumentations-Synchronisation
+- `README.md`, `PROJECT.md`, `TASKS.md` und `CHANGELOG.md` wurden an den verifizierten Stand angepasst.
 
-## 2026-07-16 Dokumentations-Synchronisation
-
-- Die wichtigsten Projekt-MD-Dateien wurden an den verifizierten Stand angepasst: `README.md`, `PROJECT.md`, `TASKS.md` und dieses Changelog.
-- Der Projektstatus ist jetzt konsistent dokumentiert: GUI-Analyse, zentralisiertes Busy-/State-Handling, verifizierter Speaker-Control-Refactor und offene Sprecher-UX.
-- Der nächste offene Schritt ist die konzeptionelle Sprecher-UX und die fachliche Bewertung der heuristischen Diarisierung.
-
-
-
-## 2026-07-16 Speaker-Control-Start
-
+### Speaker-Control-Start
 - Die Speaker-Control-Logik wurde als nächste Refactor-Richtung identifiziert und syntaktisch bereinigt.
 - Die Abgrenzung von Speaker-Settings und Sprecher-Metadaten ist umgesetzt.
-- Der nächste inhaltliche Schritt liegt bei Sprecher-UX und Diarisierungsbewertung.
 
-
-
-## 2026-07-16 Task-3-Refactor
-
+### Task-3-Refactor
 - Recording-, Transcription- und UI-Update-Logik in `app/gui.py` wurde in kleinere Hilfsmethoden aufgeteilt.
-- Wiederverwendbare Helfer kapseln jetzt das Zurücksetzen des Audio-Workflows, das Starten von Hintergrund-Workern und die Vorbereitung von Aufnahme-/Ladezuständen.
-- Die GUI bleibt funktional, ist aber im Hauptfluss besser zerlegt.
 
-
-## 2026-07-16 State-Refactor
-
-
+### State-Refactor
 - Busy-/State-Handling in `app/gui.py` wurde zentralisiert.
-- `_set_busy(...)` nutzt jetzt gemeinsame Helfer fuer Widget-Zustand und Aufnahmezustand (`_set_widgets_state(...)` und `_sync_recording_controls(...)`).
-- Die GUI bleibt funktional, ist aber beim Zustandshandling weniger doppelt kodiert.
+- `_set_busy(...)` verwendet gemeinsame Helfer für Widget-Zustand und Aufnahmezustand.
 
-## 2026-07-16 GUI-Analyse
+### GUI-Analyse
+- `app/gui.py` wurde als zentraler Orchestrator der Anwendung analysiert.
+- Als nächster Refactor-Schritt wurde eine Trennung in Zustandsverwaltung, Workflow-Logik und Anzeige-/Callback-Hilfen identifiziert.
 
+### Sprintplanung
+- Der nächste größere Arbeitsschritt wurde als Sprint in `TASKS.md` festgehalten: Sprecher-UX konzipieren und Diarisierung bewerten.
 
-- `app/gui.py` wurde auf Verantwortlichkeiten analysiert: Initialisierung, UI-Aufbau, Geräteverwaltung, Aufnahme, Audio-Verbesserung, Transkription, Wiedergabe, Speicherung und Zustandsteuerung liegen aktuell gemeinsam in der Hauptklasse.
-- Als naechster Refactor-Schritt bietet sich eine Trennung in Zustandsverwaltung, Workflow-Logik und Anzeige-/Callback-Hilfen an.
+### Verifikation
+- `app/gui.py` ist syntaktisch korrekt.
+- `python -m compileall` und `python -m unittest discover -s record_and_transcript\tests -v` liefen erfolgreich.
+- `tests/test_gui_smoke.py` prüft Modulimporte ohne Fenster.
 
-## 2026-07-16 Sprintplanung
+### Repository-Hygiene
+- Versehentlich versionierte Bytecode-Caches wurden aus dem Git-Index entfernt.
+- `.gitignore` deckt generierte Artefakte, lokale Umgebungen und temporäre Dateien ab.
+- `build/`, `dist/` und `output/` bleiben unversioniert.
 
-- Die nächste Arbeitsphase ist als Sprint in `TASKS.md` dokumentiert: Sprecher-UX konzipieren und Diarisierung bewerten.
-- Der Sprint fokussiert auf Sprecherbearbeitung im UI, heuristische Diarisierung und Verifikation.
+### CUDA-Preflight
+- Die CUDA-Diagnose wurde auf einen echten Whisper/CTranslate2-Modelltest umgestellt.
+- Relevante PATH-Einträge aus dem App-Prozess werden angezeigt.
+- Die Transkription meldet den aktiven Rechenmodus über die GUI-Statuszeile.
 
-
-## 2026-07-16 Verifikation
-
-- `app/gui.py` ist im aktuellen Workspace syntaktisch korrekt; der zuvor dokumentierte `IndentationError` ist nicht mehr reproduzierbar.
-- `python -m compileall -q record_and_transcript\main.py record_and_transcript\app record_and_transcript\core record_and_transcript\tests` wurde erfolgreich ausgeführt.
-- `python -m unittest discover -s record_and_transcript\tests -v` wurde erfolgreich ausgeführt: 5 Tests bestanden.
-- `tests/test_gui_smoke.py` ist vorhanden und prüft Modulimporte, ohne ein Fenster zu instanziieren.
-- `PROJECT.md`, `TASKS.md`, `README.md` und `CHANGELOG.md` wurden an diesen aktuellen Status angepasst.
-- Der nächste inhaltliche Schritt ist die Sprecher-UX und die fachliche Bewertung der heuristischen Diarisierung.
-
-
-
-
-
-## 2026-07-16 Repository-Hygiene
-
-- Versehentlich versionierte Bytecode-Caches (`__pycache__/`, `*.pyc`) wurden aus dem Git-Index entfernt.
-- `.gitignore` deckt generierte Artefakte, lokale Umgebungen und temporaere Dateien ab, damit spaetere Commits nur die relevanten Quell-, Test- und Dokumentationsdateien enthalten.
-- `build/`, `dist/` und `output/` bleiben bewusst unversioniert.
-
-Dieses Changelog dokumentiert die bisher erkannten Projektänderungen auf Basis des aktuellen Codebestands und der bereits durchgeführten Agent-Arbeit.
-
-## Neue Features
+## Projekt-Historie in Kurzform
 
 - Lokale Whisper-Transkription über `faster-whisper` integriert.
 - Optionale Sprecher-Unterscheidung hinzugefügt.
-- Audioaufnahme über Mikrofon implementiert.
-- Optionales Mitschneiden von System-Audio unter Windows implementiert.
-- Audio-Verbesserung vor der Transkription ergänzt:
-  - Normalisierung
-  - Hochpassfilter
-  - Rauschreduktion
-- Wiedergabe mit Play/Pause/Seek/Skip implementiert.
-- Wellenformanzeige für Audio integriert.
-- Export von Transkripten als DOCX ergänzt.
+- Audioaufnahme, System-Audio-Mitschnitt, Audio-Verbesserung, Wiedergabe, Wellenformanzeige und DOCX-Export ergänzt.
 - Session-basiertes Speichern von Rohaufnahme, verbesserter Aufnahme und Transkript ergänzt.
 - Unit-Tests für die Transcriber-Logik hinzugefügt.
+- Sprechererkennung, Segment-Verarbeitung, Clustering und Modellverwaltung in `core/transcriber.py` strukturiert.
+- GUI und Fachlogik in separate Module aufgeteilt.
+- Dokumentationsbereich `agents/` für Projektstatus, Aufgaben und Regeln eingeführt.
 
-## Bugfixes
+## Aktuelle Einschränkungen / offene Punkte
 
-- Verbesserte Trennung von Speech-Regionen und Sprecherzuordnung in der Transcriber-Logik.
-- Robustere Behandlung leerer oder sehr kurzer Audiobereiche in der Sprecherlogik.
-- Stabilere Modellwahl und Fallback-Logik für Whisper-Modi.
-- Die Transcriber-Tests decken die Kernpfade der Sprecherlogik ab.
+- Sprecherbearbeitung im UI ist noch offen.
+- Die heuristische Sprecher-Diarisierung ist noch nicht fachlich abschließend bewertet.
+- CUDA-Fehler auf Windows werden nun vor der Modellinitialisierung transparent gemeldet, wenn Laufzeit-DLLs fehlen.
 
-## Refactorings
-
-- Sprechererkennung in `core/transcriber.py` stärker in Einzelschritte zerlegt:
-  - Segment-Sammlung
-  - Text-Zusammenbau
-  - Diarisierung
-  - Speech-Region-Erkennung
-  - Feature-Embedding
-  - Clustering
-- Datenklassen für Audio-, Transcript- und Session-Metadaten konsolidiert.
-- GUI und Fachlogik sind in separate Module aufgeteilt.
-- Dokumentationsbereich `agents/` für Projektstatus, Aufgaben und Agent-Regeln eingeführt.
-
-## 2026-07-16 CUDA-Preflight
-
-- Die CUDA-Diagnose wurde von einer harten DLL-Prüfung auf einen echten Whisper/CTranslate2-Modelltest umgestellt.
-- Zusätzlich werden relevante PATH-Einträge aus dem App-Prozess angezeigt, damit Umgebungsunterschiede sichtbar werden.
-- Damit lassen sich Fehlermeldungen besser zwischen GPU-Erkennung, Prozessumgebung und tatsächlichem Modelltest unterscheiden.
-- Die Transkriptionsausführung selbst bleibt nun strikt bei dem von Whisper gewählten Modus und meldet diesen über die GUI-Statuszeile.
-
-
-
-## Aktueller Stand / bekannte Einschränkungen
-
-- `app/gui.py` ist im aktuellen Workspace syntaktisch korrekt.
-- Die restliche Kernlogik ist im Codebestand vorhanden und teilweise durch Tests abgedeckt.
-- Offen sind vor allem die Sprecherbearbeitung im UI und die Bewertung der heuristischen Sprecher-Diarisierung.
-- CUDA-Fehler auf Windows werden nun schon vor der Modellinitialisierung abgefangen, falls die nötigen DLLs fehlen.
 
 
 

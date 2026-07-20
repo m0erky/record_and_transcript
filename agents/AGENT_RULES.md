@@ -1,31 +1,32 @@
 # AGENT_RULES.md
 
-## Arbeitsregeln für zukünftige Agent-Sessions
+## Arbeitsprinzipien
 
-- Vor jeder Änderung zuerst den relevanten Codebestand und die aktuelle Dokumentation lesen.
-- Größere Änderungen erst nach Architektur- und Abhängigkeitsanalyse durchführen.
-- Wenn der Auftrag nur Dokumentation betrifft, keine funktionalen Codeänderungen vornehmen.
-- Änderungen möglichst klein, atomar und nachvollziehbar halten.
+- Vor Änderungen zuerst den relevanten Codebestand und die passenden Dokumente lesen.
+- Größere Änderungen erst nach kurzer Architektur- und Abhängigkeitsanalyse durchführen.
+- Wenn ein Auftrag nur Dokumentation betrifft, keine funktionalen Codeänderungen vornehmen.
+- Änderungen klein, atomar und nachvollziehbar halten.
 - Bestehende Projektkonventionen, Benennungen und Stilrichtungen beibehalten.
 - Keine Dateien löschen, verschieben oder umbenennen, ohne ausdrückliche Nutzerfreigabe.
 
-## Dokumentationspflicht
+## Dokumentationsrollen
 
-- `PROJECT.md` aktuell halten, wenn Architektur, Technologien, Abläufe oder technische Entscheidungen sich ändern.
-- `TASKS.md` pflegen, damit offene Punkte, In-Bearbeitung und erledigte Aufgaben sichtbar bleiben.
-- `CHANGELOG.md` nach jeder relevanten Session aktualisieren.
-- Nach Verifikation von Codeänderungen den sichtbaren Projektstand in `README.md`, `PROJECT.md` und `TASKS.md` auf denselben Stand bringen.
-- Technische Schulden, Einschränkungen, Fehlerzustände und Architekturentscheidungen transparent dokumentieren.
-- Wenn ein Problem nicht behoben wird, den aktuellen Status klar festhalten statt ihn zu verschweigen.
+- `README.md` ist die benutzerorientierte Einstiegshilfe.
+- `PROJECT.md` beschreibt Architektur, Entscheidungen und technischen Stand.
+- `TASKS.md` enthält offene Aufgaben, Prioritäten und erledigte Arbeit.
+- `CHANGELOG.md` dokumentiert Änderungen chronologisch.
+- Nach relevanten Codeänderungen die sichtbare Doku konsistent halten.
+- Technische Schulden, Einschränkungen und offene Fehler transparent dokumentieren.
+- Wenn etwas nicht behoben wird, den Status klar und ehrlich festhalten.
 
 ## Coding Standards
 
 - Typannotationen verwenden, wenn sie im Projektkontext sinnvoll sind.
 - Dataclasses und modulare Trennung beibehalten.
-- UI-Strings und Fehlermeldungen konsistent und verständlich formulieren.
+- UI-Strings und Fehlermeldungen klar und konsistent formulieren.
 - Komplexe Logik in kleine Hilfsmethoden aufteilen.
 - Keine unnötigen Abhängigkeiten einführen.
-- Plattformspezifische Besonderheiten, insbesondere Windows- und Audio-Laufzeit, explizit beachten.
+- Plattformspezifische Besonderheiten, vor allem unter Windows, explizit beachten.
 
 ## Sicherheitsregeln
 
@@ -43,4 +44,5 @@
 - Dokumentationsänderungen möglichst von funktionalen Änderungen trennen.
 - Build-/Dist-Artefakte nur versionieren, wenn das Projekt es bewusst verlangt.
 - Python-Bytecode-Caches (`__pycache__/`, `*.pyc`) niemals versionieren; falls sie bereits im Index liegen, aus dem Index entfernen.
+
 

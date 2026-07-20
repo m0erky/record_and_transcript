@@ -1,56 +1,36 @@
-[README.md](https://github.com/user-attachments/files/29960831/README.md)
 # Audio-Transkription
 
-Windows-Desktop-App zum Aufnehmen, Verbessern und Transkribieren von Sprache mit Whisper.
+Windows-Desktop-App zum Aufnehmen, Verbessern, Abspielen und Transkribieren von Sprache mit Whisper.
 
 ## Funktionen
 
-- Audio-Aufnahme vom Mikrofon (Geräteauswahl) mit **Pause/Fortsetzen**
-
-- **Optional: System-Audio mitschneiden** (Teams, Browser etc. über WASAPI-Loopback)
-- **Vorhandene Audiodatei laden** und direkt transkribieren
-
-- **Wiedergabe mit Steuerung**: Abspielen, Pause, ±10 s spulen, Klick in Wellenform zum Springen
-- **Wellenform-Visualisierung** der Aufnahme
-- **Audio-Verbesserung** vor der Transkription:
-  - Lautstärke-Normalisierung
-  - Hochpassfilter (entfernt tieffrequentes Rauschen)
+- Mikrofonaufnahme mit Geräteauswahl sowie Pause/Fortsetzen
+- Optionales Mitschneiden von System-Audio über WASAPI-Loopback
+- Vorhandene Audiodateien laden und direkt transkribieren
+- Wellenformanzeige und einfache Wiedergabesteuerung
+- Audioverbesserung vor der Transkription:
+  - Normalisierung
+  - Hochpassfilter
   - Rauschreduktion
-  - manuell („Jetzt verbessern“) oder automatisch vor Transkription
-- Lokale Whisper-Transkription (offline)
-- **Optionale Sprecher-Unterscheidung** im Transkript (`Sprecher 1`, `Sprecher 2`, ...)
-- Export als Word-Dokument (`.docx`)
-- Speichern von Roh-Aufnahme, verbesserter Aufnahme und Transkript
-
-## Aktueller Stand
-
-- Die App ist als lokale Windows-Desktop-Anwendung mit Whisper-Transkription, optionaler Sprecher-Unterscheidung und dateibasiertem Speichern aufgebaut.
-- Die GUI-Zustandslogik wurde bereits teilweise zentralisiert; Recording-, Transcription- und Lade-Workflows sind in Hilfsmethoden aufgeteilt.
-- Die Whisper-Transkription loggt den aktuell verwendeten Rechenmodus über die GUI-Statusmeldungen, etwa `Whisper meldet aktives Gerät: cuda`.
-- CUDA wird über die GPU-Erkennung und einen echten Whisper/CTranslate2-Modelltest diagnostiziert; zusätzlich zeigt die GUI einen CUDA-Diagnose-Dialog mit PATH-Hinweisen und Status an.
-- Auf Windows registriert die App CUDA-DLL-Verzeichnisse aus dem laufenden Prozess und aus typischen CUDA-Installationspfaden und erweitert dafür auch den Prozess-`PATH`, damit Laufzeitbibliotheken wie `cublas64_12.dll` gefunden werden.
-
-- Es gibt aktuell kein separates Logfile; die Laufzeitmeldungen erscheinen in der GUI-Statuszeile und bei Fehlern im Popup.
-
-- Offen bleiben die konzeptionelle Sprecher-UX und die Bewertung der heuristischen Diarisierung.
-
-
+  - manuell oder automatisch vor der Transkription
+- Lokale Whisper-Transkription ohne Cloud-Abhängigkeit
+- Optionale heuristische Sprecher-Unterscheidung im Transkript
+- Export als TXT und DOCX
+- Speichern von Rohaufnahme, verbesserter Aufnahme und Transkript pro Session
 
 ## Voraussetzungen
 
 - Windows 10/11
 - Python 3.10 oder neuer
 - Mikrofon
-- Optional: FFmpeg (empfohlen für `faster-whisper`)
+- Optional: FFmpeg, empfohlen für `faster-whisper`
 
 ## Installation
-
 
 ```powershell
 cd record_and_transcript
 python -m venv venv
 .\venv\Scripts\activate
-
 pip install -r requirements.txt
 ```
 
@@ -60,28 +40,42 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## Ablauf
+## Typischer Ablauf
 
 1. Mikrofon und Whisper-Modell wählen
-2. Optional: **System-Audio mitschneiden** aktivieren und Ausgabegerät wählen (z. B. Lautsprecher/Headset)
+2. Optional System-Audio aktivieren und Ausgabegerät wählen
 3. Gewünschte Audio-Verbesserungen aktivieren
-4. Entweder **Aufnahme starten** → bei Bedarf **Pause/Fortsetzen** → **Aufnahme stoppen**
-5. Oder **Aufnahme laden** und eine vorhandene Audiodatei auswählen
-6. Aufnahme in der **Wellenform** prüfen, mit Play/Pause/Spulen anhören
-7. Optional: **Jetzt verbessern** oder automatische Verbesserung bei Transkription
-8. Optional: **Sprecher unterscheiden** aktivieren und maximale Sprecherzahl wählen
-9. **Transkribieren**
-10. **Als DOCX exportieren** oder **Alles speichern**
+4. Aufnahme starten, bei Bedarf pausieren, dann stoppen
+5. Alternativ eine vorhandene Audiodatei laden
+6. Aufnahme in der Wellenform prüfen und bei Bedarf abspielen
+7. Optional manuell verbessern oder die automatische Verbesserung nutzen
+8. Optional Sprecher-Unterscheidung aktivieren
+9. Transkribieren
+10. Als DOCX exportieren oder alles speichern
 
-Beim „Alles speichern“ werden Dateien unter `output/sessions/<Zeitstempel>/` abgelegt:
+## Speicherort der Ergebnisse
 
-```
+Beim Speichern einer Session legt die App die Dateien unter `output/sessions/<Zeitstempel>/` ab:
 
+```text
 recording_raw.wav
-recording_enhanced.wav   (falls verbessert)
+recording_enhanced.wav   (falls vorhanden)
 transcript.txt
 transcript.docx
 ```
+
+## Hinweise
+
+- Beim ersten Transkribieren wird das gewählte Whisper-Modell heruntergeladen.
+- Für Deutsch ist `small` meist ein guter Startpunkt.
+- Über die App können `auto`, `cpu` oder `cuda` gewählt werden, sofern die CUDA-12-Laufzeit auf Windows verfügbar ist.
+- Die GUI zeigt den von Whisper gemeldeten Rechenmodus während der Transkription in der Statuszeile an.
+- Für CUDA gibt es einen Diagnose-Dialog mit GPU-Erkennung, PATH-Hinweisen und einem echten Modelltest.
+- Wenn der CUDA-Modus trotz erkannter GPU scheitert, hilft oft ein Neustart der App, damit Laufzeit-DLLs sauber registriert werden.
+- Fehlerdialoge zeigen die konkrete Whisper-/CUDA-Exception an.
+- Es gibt bewusst kein separates Logfile; Laufzeitmeldungen bleiben in der GUI.
+- Sprecher-Unterscheidung ist aktuell heuristisch und lokal; sie eignet sich für einfache Zuordnung, ist aber nicht so präzise wie spezialisierte Diarisierung.
+- System-Audio funktioniert unter Windows über WASAPI-Loopback. Wähle dafür das Ausgabegerät, über das der Ton tatsächlich läuft.
 
 ## Entwicklung und Tests
 
@@ -90,24 +84,13 @@ python -m compileall -q main.py app core tests
 python -m unittest discover -s tests -v
 ```
 
-## Hinweise
+## Projektstand in Kurzform
 
-- Beim ersten Transkribieren wird das Whisper-Modell heruntergeladen (je nach Größe ca. 75–1500 MB).
-- Für Deutsch empfiehlt sich das Modell `small`.
-- Über die App kann `auto`, `cpu` oder `cuda` gewählt werden, sofern die CUDA-12-Laufzeit auf Windows verfügbar ist.
-- Während der Transkription zeigt die GUI den von Whisper verwendeten Rechenmodus in den Statusmeldungen an. Beispiel: `Whisper meldet aktives Gerät: cuda`.
-- Es gibt aktuell kein separates Logfile; die Laufzeitmeldungen sind nur in der GUI-Statuszeile sichtbar. Bei Fehlern erscheint ein Popup mit der tatsächlichen Whisper-/CUDA-Exception.
+- Lokale Windows-Desktop-Anwendung mit Whisper-Transkription
+- GUI-basierter Workflow ohne externe API
+- Datei- und sessionbasiertes Speichern
+- CUDA-Diagnose und CUDA-DLL-Registrierung unter Windows vorhanden
+- Sprecher-UX und die Bewertung der heuristischen Diarisierung sind weiterhin ein offener Ausbaubereich
 
-- Falls `cuda` nicht angezeigt wird oder der CUDA-Modus Probleme macht, nutze den **CUDA prüfen**-Dialog in der GUI; er zeigt die GPU-Erkennung, relevante PATH-Einträge und den echten Whisper-Modelltest auf CUDA.
-- Wenn der Modelltest oder die Transkription trotz erkannter GPU scheitern, prüfe die CUDA-Installation bzw. starte die App erneut, damit die Laufzeit-DLLs registriert werden können.
-- Die Transkription versucht bei CUDA-DLL-Fehlern zusätzlich einmalig, den CUDA-Pfad erneut zu registrieren und den Aufruf zu wiederholen.
-
-- Wenn der CUDA-Laufzeitstack im Startprozess nicht vollständig verfügbar ist, wird die konkrete Exception im Fehlerdialog angezeigt, damit die Ursache direkt sichtbar ist.
-
-
-
-
-- **Sprecher-Unterscheidung** arbeitet vollständig lokal und heuristisch auf Basis der Whisper-Segmente. Sie ist nützlich für Meetings/Interviews, aber nicht so präzise wie spezialisierte Diarisierungsmodelle.
-- **System-Audio**: Funktioniert unter Windows über WASAPI-Loopback. Wähle das Ausgabegerät, über das Teams/Browser Ton ausgibt (meist deine Lautsprecher oder Kopfhörer).
 
 
