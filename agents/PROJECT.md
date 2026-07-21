@@ -36,6 +36,7 @@ Die Kernverarbeitung bleibt lokal auf dem Rechner des Nutzers. Für die Hauptfun
 ### Tests
 - `tests/test_gui_smoke.py` prüft Modulimporte ohne Fenster.
 - `tests/test_transcriber.py` deckt Kernpfade der Transcriber- und Sprecherlogik ab.
+- `tests/test_backend_factory.py`, `tests/test_azure_openai_backend.py` und `tests/test_whisper_cpp_backend.py` verifizieren die Factory-Auswahl sowie die Azure- und Whisper.cpp-Backends.
 
 ## Datenmodell und Speicherung
 
@@ -84,13 +85,13 @@ Wichtige Dataclasses im Projekt sind:
 - Recording-, Transcription- und Ladeflüsse sind in kleinere Methoden zerlegt.
 - Die Transkriptions-Engine basiert auf `app/backends/base.py` und den konkreten `app/backends/`-Modulen; GUI und Business-Logik arbeiten ausschließlich über das `TranscriptionBackend`-Interface.
 - Backend-Auswahl und Persistenz erfolgen über `app/backends/factory.py` in Kombination mit `app/settings.py`, das die gewünschte Backend-Konfiguration speichert.
-- Neben `FasterWhisperBackend` existieren vorbereitete Stubs für `WhisperCppBackend`, `OpenAIBackend` und `AzureOpenAIBackend`.
+- Neben `FasterWhisperBackend` existieren vorbereitete Stubs für `WhisperCppBackend` und `OpenAIBackend`; `AzureOpenAIBackend` nutzt bereits die echte Azure-API and `requests`.
 - Die Whisper-Transkription meldet den aktiven Rechenmodus über GUI-Statusmeldungen.
 - Es gibt einen CUDA-Diagnose-Dialog mit GPU-Erkennung, PATH-Hinweisen und echtem Modelltest.
 - Unter Windows registriert der Transcriber CUDA-DLL-Verzeichnisse vor Whisper-Aufrufen automatisch.
 - CUDA- und Whisper-Fehler werden mit der echten Backend-Exception angezeigt.
 - Ein separates Logfile ist bewusst nicht vorgesehen; die Oberfläche bleibt die primäre Rückmeldung.
-- Die aktuelle Testsuite umfasst 10 Tests und wurde im Workspace verifiziert.
+- Die aktuelle Testsuite umfasst 20 Tests und wurde im Workspace verifiziert.
 
 ## Bekannte offene Punkte
 

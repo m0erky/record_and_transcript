@@ -7,7 +7,9 @@
 - Die gesamte Transkriptions-Architektur wurde von `core/backends/` nach `app/backends/` verschoben; dort beherbergen `base.py`, die konkreten Backends und die Factory nun die Schnittstelle und Implementierungen.
 - `app/backends/base.py` definiert die `TranscriptionBackend`-Schnittstelle samt Datentypen, das Backend-Interface selbst wurde um `initialize`, `supports_*` und `cleanup` erweitert.
 - `app/settings.py` speichert die gewünschte Backend-Auswahl im Nutzerordner, die GUI bietet eine Option zur Laufzeitwahl und lädt die Konfiguration beim Start.
-- `WhisperCppBackend`, `OpenAIBackend` und `AzureOpenAIBackend` liefern vorbereitete Stubs; `FasterWhisperBackend` ist auf die neue Struktur angepasst und bietet weiterhin CUDA-Diagnose sowie Diarisierung.
+- `WhisperCppBackend` und `OpenAIBackend` liefern vorbereitete Stubs; `AzureOpenAIBackend` nutzt eine echte API-Integration (WAV-Upload via `requests`, Konfigurationsprüfung, Azure-Endpoint/Deployment). `FasterWhisperBackend` ist auf die neue Struktur angepasst und bietet weiterhin CUDA-Diagnose sowie Diarisierung.
+- `requests` wurde als Abhängigkeit ergänzt, damit die Azure-Schnittstelle Audio per Multipart an Azure OpenAI schicken kann.
+- Neue Tests für `BackendFactory` und `AzureOpenAIBackend` verifizieren Backend-Auswahl, Option-Passage und API-Antwortverarbeitung.
 - Die Tests wurden auf die neuen Pfade angepasst, und die GUI greift ausschließlich über das Interface auf die Backends zu.
 
 ## 2026-07-20

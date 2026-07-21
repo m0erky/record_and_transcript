@@ -28,13 +28,14 @@
 - [x] Transkriptions-Backends über eine gemeinsame Schnittstelle und Factory entkoppelt
 - [x] Neue Backend-Architektur unter `app/backends/` inklusive persistenter Backend-Wahl in `app/settings.py`
 - [x] Dokumentation nach den Verifikationen aktualisiert
+- [x] Azure OpenAI Backend mit echter API-Kommunikation vorbereitet und getestet
 
 ## Offene Folgethemen
 
 - Prüfen, ob heuristische Sprecher-Diarisierung für Zielanwender ausreicht oder ob ein dediziertes Modell sinnvoll wird.
 - Überlegen, ob Session-Historie, Modellverwaltung oder Exportformate als nächstes den größten Nutzen bringen.
 - Entscheiden, ob ein optionales Debug-Log für Supportfälle ergänzt werden soll.
-- Die vorbereiteten Backends für OpenAI und Azure OpenAI mit echter API-Kommunikation ausstatten.
+- OpenAI-Backend mit echter API-Kommunikation ergänzen.
 - Whisper.cpp-Backend mit Vulkan-Unterstützung und `transcribe`-Implementierung versehen.
 
 ## In Bearbeitung
@@ -54,7 +55,7 @@
 - Die GUI ist funktionsfähig und die Kernpfade sind durch Tests abgesichert.
 - CUDA-Diagnose basiert auf GPU-Erkennung, PATH-Hinweisen und einem echten Modelltest.
 - Unter Windows registriert der Transcriber CUDA-DLL-Verzeichnisse vor Whisper-Aufrufen.
-- Die aktuelle Testsuite umfasst 10 Tests.
+- Die aktuelle Testsuite umfasst 20 Tests.
 
 
 
