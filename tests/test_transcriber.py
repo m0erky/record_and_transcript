@@ -12,12 +12,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from core.transcriber import SpeechRegion, TranscriptSegment, WhisperTranscriber
+from core.backends.faster_whisper_backend import FasterWhisperBackend
+from core.transcription import SpeechRegion, TranscriptSegment
 
 
-class WhisperTranscriberTests(unittest.TestCase):
+class FasterWhisperBackendTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.transcriber = WhisperTranscriber()
+        self.transcriber = FasterWhisperBackend()
 
     def test_detect_speech_regions_splits_separated_bursts(self) -> None:
         sample_rate = 1000
@@ -86,7 +87,7 @@ class WhisperTranscriberTests(unittest.TestCase):
                 raise RuntimeError("cublas64_12.dll cannot be loaded")
             raise AssertionError("CPU fallback must not be attempted")
 
-        with patch("core.transcriber.WhisperModel", side_effect=fake_whisper_model):
+        with patch("core.backends.faster_whisper_backend.WhisperModel", side_effect=fake_whisper_model):
             with self.assertRaises(RuntimeError) as ctx:
                 self.transcriber._ensure_model("tiny", "cuda")
 
@@ -104,16 +105,16 @@ class WhisperTranscriberTests(unittest.TestCase):
                 added_paths.append(path)
                 return object()
 
-            with patch("core.transcriber.sys.platform", "win32"), patch.dict(
-                "core.transcriber.os.environ",
+            with patch("core.backends.faster_whisper_backend.sys.platform", "win32"), patch.dict(
+                "core.backends.faster_whisper_backend.os.environ",
                 {"CUDA_PATH": str(cuda_root)},
                 clear=True,
-            ), patch("core.transcriber.os.add_dll_directory", side_effect=fake_add_dll_directory), patch.object(
-                WhisperTranscriber,
+            ), patch("core.backends.faster_whisper_backend.os.add_dll_directory", side_effect=fake_add_dll_directory), patch.object(
+                FasterWhisperBackend,
                 "_registered_dll_directories",
                 set(),
-            ), patch.object(WhisperTranscriber, "_dll_directory_handles", []):
-                WhisperTranscriber._ensure_windows_cuda_runtime_paths()
+            ), patch.object(FasterWhisperBackend, "_dll_directory_handles", []):
+                FasterWhisperBackend._ensure_windows_cuda_runtime_paths()
 
         self.assertEqual(added_paths, [str(bin_dir)])
 
@@ -137,8 +138,8 @@ class WhisperTranscriberTests(unittest.TestCase):
         audio = np.ones(16000, dtype=np.float32)
         progress_messages: list[str] = []
 
-        with patch("core.transcriber.ctranslate2", fake_ctranslate2), patch(
-            "core.transcriber.WhisperModel",
+        with patch("core.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2), patch(
+            "core.backends.faster_whisper_backend.WhisperModel",
             side_effect=lambda *args, **kwargs: FakeCudaModel(),
         ):
             result = self.transcriber.transcribe(
@@ -169,8 +170,8 @@ class WhisperTranscriberTests(unittest.TestCase):
 
         audio = np.ones(16000, dtype=np.float32)
 
-        with patch("core.transcriber.ctranslate2", fake_ctranslate2), patch(
-            "core.transcriber.WhisperModel",
+        with patch("core.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2), patch(
+            "core.backends.faster_whisper_backend.WhisperModel",
             side_effect=lambda *args, **kwargs: FakeCudaModel(),
         ):
             with self.assertRaises(RuntimeError) as ctx:
@@ -186,8 +187,8 @@ class WhisperTranscriberTests(unittest.TestCase):
             {"get_cuda_device_count": staticmethod(lambda: 1)},
         )
 
-        with patch("core.transcriber.ctranslate2", fake_ctranslate2):
-            modes = WhisperTranscriber.available_execution_modes()
+        with patch("core.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2):
+            modes = FasterWhisperBackend.available_execution_modes()
 
         self.assertEqual(modes, ["auto", "cpu", "cuda"])
 
@@ -202,15 +203,15 @@ class WhisperTranscriberTests(unittest.TestCase):
             def __init__(self) -> None:
                 self.model = type("InnerModel", (), {"device": "cuda"})()
 
-        with patch("core.transcriber.ctranslate2", fake_ctranslate2), patch(
-            "core.transcriber.WhisperModel",
+        with patch("core.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2), patch(
+            "core.backends.faster_whisper_backend.WhisperModel",
             side_effect=lambda *args, **kwargs: FakeModel(),
-        ), patch("core.transcriber.sys.platform", "win32"), patch.dict(
-            "core.transcriber.os.environ",
+        ), patch("core.backends.faster_whisper_backend.sys.platform", "win32"), patch.dict(
+            "core.backends.faster_whisper_backend.os.environ",
             {"PATH": r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin"},
             clear=False,
         ):
-            report = WhisperTranscriber.cuda_diagnostic_report()
+            report = FasterWhisperBackend.cuda_diagnostic_report()
 
         self.assertIn("CUDA-Diagnose", report)
         self.assertIn("Gefundene CUDA-Geräte: 1", report)

@@ -1,5 +1,15 @@
 # CHANGELOG.md
 
+## 2026-07-20
+
+### Modularisierung der Transkriptions-Backends
+
+- Die bisher monolithische `core/transcriber.py` wurde aufgelöst. Stattdessen bieten `core/transcription.py` und das Verzeichnis `core/backends/` eine gemeinsame Schnittstelle plus konkrete Backends.
+- `FasterWhisperBackend` verwaltet weiterhin die Whisper-Logik sowie CUDA-Diagnosen, lebt aber jetzt in einem dedizierten Backend-Modul.
+- `TranscriptionBackendFactory` ermöglicht die Auswahl eines Backends über Konfiguration, während die GUI und Business-Logik nur die gemeinsame Schnittstelle nutzen.
+- Stubs für `WhisperCppBackend`, `OpenAIBackend` und `AzureOpenAIBackend` wurden ergänzt, um zukünftige Erweiterungen vorzubereiten.
+- Die GUI importiert nun die Factory und nutzt deren Standard-Backend; Tests wurden entsprechend auf `FasterWhisperBackend` aktualisiert.
+
 ## 2026-07-17
 
 ### CUDA-Transkriptionslogging

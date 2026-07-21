@@ -1,9 +1,9 @@
-﻿"""Whisper-Transkription mit optionaler Sprecher-Unterscheidung."""
+"""Faster-Whisper-Backend für die neue Transkriptions-Abstraktion."""
+
 from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -14,36 +14,20 @@ from scipy.fftpack import dct
 from scipy.signal import spectrogram
 from scipy.spatial.distance import pdist, squareform
 
-try:
+from core.transcription import (
+    SpeechRegion,
+    TranscriptSegment,
+    TranscriptionResult,
+    TranscriptionBackend,
+)
+
+try:  # pragma: no cover - optional dependency
     import ctranslate2
-except ImportError:
+except ImportError:  # pragma: no cover - optional dependency
     ctranslate2 = None
 
 
-@dataclass
-class SpeechRegion:
-    start: float
-    end: float
-    speaker_label: int | None = None
-
-
-@dataclass
-class TranscriptSegment:
-    start: float
-    end: float
-    text: str
-    speaker: str | None = None
-
-
-@dataclass
-class TranscriptionResult:
-    text: str
-    language: str
-    duration: float
-    segments: list[TranscriptSegment] = field(default_factory=list)
-
-
-class WhisperTranscriber:
+class FasterWhisperBackend(TranscriptionBackend):
     MODEL_SIZES = ("tiny", "base", "small", "medium")
     EXECUTION_MODES = ("auto", "cpu", "cuda")
     _registered_dll_directories: set[str] = set()
@@ -55,7 +39,7 @@ class WhisperTranscriber:
         self._loaded_config: tuple[str, str, str] | None = None
 
     @classmethod
-    def _ensure_windows_cuda_runtime_paths(cls) -> None:
+    def _ensure_windows_cuda_runtime_paths(cls) -> None:  # pragma: no cover - Windows-specific
         if sys.platform != "win32":
             return
 
@@ -123,7 +107,7 @@ class WhisperTranscriber:
         return None if count > 0 else "Es wurde keine CUDA-fähige GPU für Whisper gefunden."
 
     @classmethod
-    def _cuda_model_smoke_test_issue(cls) -> str | None:
+    def _cuda_model_smoke_test_issue(cls) -> str | None:  # pragma: no cover - optional smoke test
         cls._ensure_windows_cuda_runtime_paths()
         issue = cls._cuda_device_issue()
         if issue:
@@ -477,7 +461,10 @@ class WhisperTranscriber:
         return merged
 
     def _format_speaker_text(self, segments: list[TranscriptSegment]) -> str:
-        return "\n\n".join(f"{segment.speaker or 'Sprecher ?'} [{self._format_timestamp(segment.start)} - {self._format_timestamp(segment.end)}]: {segment.text}" for segment in segments).strip()
+        return "\n\n".join(
+            f"{segment.speaker or 'Sprecher ?'} [{self._format_timestamp(segment.start)} - {self._format_timestamp(segment.end)}]: {segment.text}"
+            for segment in segments
+        ).strip()
 
     def _format_timestamp(self, seconds: float) -> str:
         total_seconds = max(0, int(round(seconds)))
@@ -521,5 +508,4 @@ class WhisperTranscriber:
         return ("cuda", "float16") if self.gpu_available() else ("cpu", "int8")
 
 
-__all__ = ["SpeechRegion", "TranscriptSegment", "TranscriptionResult", "WhisperTranscriber"]
-
+__all__ = ["FasterWhisperBackend"]

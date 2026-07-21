@@ -27,7 +27,8 @@ Die Kernverarbeitung bleibt lokal auf dem Rechner des Nutzers. Für die Hauptfun
 - `core/audio_recorder.py` nimmt Mikrofon- und optional System-Audio auf.
 - `core/audio_processor.py` verbessert Audio vor der Transkription.
 - `core/audio_player.py` spielt Audio ab und steuert Play/Pause/Seek.
-- `core/transcriber.py` lädt Whisper, transkribiert Audio und erzeugt optional heuristische Sprecherzuordnungen.
+- `core/transcription.py` definiert zentrale Datentypen und die Schnittstelle für austauschbare Transkriptions-Backends.
+- `core/backends/` enthält die Implementierungen (z. B. `FasterWhisperBackend`) samt Factory zur Laufzeitwahl.
 - `core/storage.py` verwaltet Sessions und Artefakte.
 - `core/docx_exporter.py` erzeugt DOCX-Dateien.
 
@@ -80,6 +81,7 @@ Wichtige Dataclasses im Projekt sind:
 - Die GUI ist funktionsfähig und strukturell bereits teilweise entkoppelt.
 - Busy-/State-Handling wurde in Hilfsfunktionen aufgeteilt.
 - Recording-, Transcription- und Ladeflüsse sind in kleinere Methoden zerlegt.
+- Die Transkriptions-Engine basiert auf `core/transcription.py` und `core/backends/`, wodurch verschiedene Backends über eine gemeinsame Factory bereitgestellt werden.
 - Die Whisper-Transkription meldet den aktiven Rechenmodus über GUI-Statusmeldungen.
 - Es gibt einen CUDA-Diagnose-Dialog mit GPU-Erkennung, PATH-Hinweisen und echtem Modelltest.
 - Unter Windows registriert der Transcriber CUDA-DLL-Verzeichnisse vor Whisper-Aufrufen automatisch.

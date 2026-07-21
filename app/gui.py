@@ -18,9 +18,10 @@ from app.widgets import labeled_checkbox, labeled_option_menu
 from core.audio_player import AudioPlayer
 from core.audio_processor import AudioProcessor, EnhancementOptions
 from core.audio_recorder import AudioRecorder, RecordingConfig, SAMPLE_RATE
+from core.backends.factory import TranscriptionBackendFactory
 from core.docx_exporter import default_title, export_to_docx
 from core.storage import SessionStorage
-from core.transcriber import WhisperTranscriber
+
 
 
 class AudioTranscriptionApp(ctk.CTk):
@@ -37,8 +38,10 @@ class AudioTranscriptionApp(ctk.CTk):
         self.recorder = AudioRecorder(sample_rate=SAMPLE_RATE)
         self.player = AudioPlayer(sample_rate=SAMPLE_RATE)
         self.processor = AudioProcessor(sample_rate=SAMPLE_RATE)
-        self.transcriber = WhisperTranscriber()
+        self.backend_factory = TranscriptionBackendFactory()
+        self.transcriber = self.backend_factory.create_backend()
         self.storage = SessionStorage()
+
 
         self.raw_audio = np.array([], dtype=np.float32)
         self.enhanced_audio: np.ndarray | None = None
@@ -96,10 +99,11 @@ class AudioTranscriptionApp(ctk.CTk):
             settings_frame,
 
             "Whisper-Modell:",
-            values=list(WhisperTranscriber.MODEL_SIZES),
+            values=list(self.transcriber.MODEL_SIZES),
             default="small",
             width=160,
         )
+
         model_label.grid(row=0, column=2, padx=12, pady=10, sticky="w")
         self.model_menu.grid(row=0, column=3, padx=12, pady=10, sticky="ew")
 
@@ -117,10 +121,11 @@ class AudioTranscriptionApp(ctk.CTk):
         execution_label, self.execution_menu = labeled_option_menu(
             settings_frame,
             "Rechenmodus:",
-            values=WhisperTranscriber.available_execution_modes(),
+            values=self.transcriber.available_execution_modes(),
             default="auto",
             width=160,
         )
+
         execution_label.grid(row=1, column=2, padx=12, pady=(0, 8), sticky="w")
 
         self.execution_menu.grid(row=1, column=3, padx=12, pady=(0, 8), sticky="w")
@@ -473,7 +478,8 @@ class AudioTranscriptionApp(ctk.CTk):
         self.status_label.configure(text=f"Status: {message}")
 
     def _show_cuda_diagnostics(self) -> None:
-        report = WhisperTranscriber.cuda_diagnostic_report()
+        report = type(self.transcriber).cuda_diagnostic_report()
+
 
         dialog = ctk.CTkToplevel(self)
         dialog.title("CUDA-Diagnose")

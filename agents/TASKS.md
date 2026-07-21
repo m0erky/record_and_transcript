@@ -25,6 +25,7 @@
 - [x] Kein separates Logfile eingeführt; Status- und Fehlerausgabe bleiben GUI-basiert
 - [x] CUDA-/Whisper-Fehlerdialoge so angepasst, dass die echte Backend-Exception angezeigt wird
 - [x] CUDA-DLL-Suchpfade unter Windows automatisch registriert
+- [x] Transkriptions-Backends über eine gemeinsame Schnittstelle und Factory entkoppelt
 - [x] Dokumentation nach den Verifikationen aktualisiert
 
 ## Offene Folgethemen
