@@ -14,7 +14,7 @@ from typing import Any, Callable
 import numpy as np
 import soundfile as sf
 
-from app.backends.base import TranscriptionBackend, TranscriptionResult
+from app.backends.base import BackendConfigurationError, TranscriptionBackend, TranscriptionResult
 
 
 LOGGER = logging.getLogger(__name__)
@@ -60,9 +60,9 @@ class WhisperCppBackend(TranscriptionBackend):
         if self._impl_config.use_vulkan:
             self._prepare_vulkan()
         if self._model_path is None:
-            raise RuntimeError("Whisper.cpp Modell fehlt in den Backend-Einstellungen ('model_path').")
+            raise BackendConfigurationError("Whisper.cpp Modell fehlt in den Backend-Einstellungen ('model_path').")
         if not self._model_path.exists():
-            raise RuntimeError(f"Whisper.cpp Modell '{self._model_path}' wurde nicht gefunden.")
+            raise BackendConfigurationError(f"Whisper.cpp Modell '{self._model_path}' wurde nicht gefunden.")
         if shutil.which(str(self._binary_path)) is None and not self._binary_path.exists():
             raise RuntimeError(f"Whisper.cpp-Binary '{self._binary_path}' ist nicht vorhanden oder nicht ausführbar.")
         self._initialized = True

@@ -9,6 +9,11 @@ from typing import Any, Callable
 import numpy as np
 
 
+class BackendConfigurationError(RuntimeError):
+    """Raised when a transcription backend cannot be configured."""
+    pass
+
+
 @dataclass
 class SpeechRegion:
     start: float
@@ -87,6 +92,7 @@ class TranscriptionBackend(ABC):
 
 
 __all__ = [
+    "BackendConfigurationError",
     "SpeechRegion",
     "TranscriptSegment",
     "TranscriptionResult",

@@ -14,9 +14,12 @@ from typing import Any, Callable
 import customtkinter as ctk
 import numpy as np
 
+from app.backends.base import BackendConfigurationError
 from app.backends.factory import BackendFactory
 from app.settings import AppSettings, load_settings, save_settings
+
 from app.waveform import WaveformCanvas
+
 from app.widgets import labeled_checkbox, labeled_option_menu
 from core.audio_player import AudioPlayer
 from core.audio_processor import AudioProcessor, EnhancementOptions
@@ -25,9 +28,11 @@ from core.docx_exporter import default_title, export_to_docx
 from core.storage import SessionStorage
 
 
+_ALLOWED_BACKEND_KEYS = ["faster_whisper", "whispercpp", "azure_openai"]
 
 
 class AudioTranscriptionApp(ctk.CTk):
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -46,10 +51,10 @@ class AudioTranscriptionApp(ctk.CTk):
         self.backend_factory = BackendFactory()
         self.transcriber = self._create_backend_from_settings()
         self.storage = SessionStorage()
-
-
+        self._init_warnings: list[str] = []
 
         self.raw_audio = np.array([], dtype=np.float32)
+
         self.enhanced_audio: np.ndarray | None = None
         self.transcript_text = ""
         self.enhancement_steps: list[str] = []
@@ -60,7 +65,6 @@ class AudioTranscriptionApp(ctk.CTk):
         self._source_audio_path: Path | None = None
 
 
-
         self.player.set_callbacks(
             on_position_change=self._on_player_position,
             on_finished=self._on_player_finished,
@@ -68,7 +72,11 @@ class AudioTranscriptionApp(ctk.CTk):
 
         self._build_ui()
         self._refresh_devices()
+
+
+        self._show_init_warnings()
         self._set_status("Bereit")
+
 
     def _build_ui(self) -> None:
         self.grid_columnconfigure(0, weight=1)
@@ -120,14 +128,20 @@ class AudioTranscriptionApp(ctk.CTk):
         self.model_menu.grid(row=0, column=3, padx=12, pady=10, sticky="ew")
 
         backend_values = self.backend_factory.available_backends()
-        backend_default = self._settings.backend if self._settings.backend in backend_values else backend_values[0]
+        filtered_backend_values = [
+            backend_key for backend_key in backend_values if backend_key in _ALLOWED_BACKEND_KEYS
+        ]
+        if not filtered_backend_values:
+            filtered_backend_values = backend_values
+        backend_default = self._settings.backend if self._settings.backend in filtered_backend_values else filtered_backend_values[0]
         backend_label, self.backend_menu = labeled_option_menu(
             settings_frame,
             "Transkriptions-Backend:",
-            values=backend_values,
+            values=filtered_backend_values,
             default=backend_default,
             width=220,
         )
+
         backend_label.grid(row=0, column=4, padx=12, pady=10, sticky="w")
         self.backend_menu.grid(row=0, column=5, padx=12, pady=10, sticky="ew")
         self.backend_menu.configure(command=self._on_backend_selected)
@@ -395,7 +409,6 @@ class AudioTranscriptionApp(ctk.CTk):
     def _set_loopback_enabled(self, enabled: bool) -> None:
 
 
-
         state = "normal" if enabled else "disabled"
         self.loopback_menu.configure(state=state)
         self._loopback_label.configure(
@@ -403,7 +416,15 @@ class AudioTranscriptionApp(ctk.CTk):
         )
 
 
+    def _show_init_warnings(self) -> None:
+        while self._init_warnings:
+            messagebox.showwarning(
+                "Backend-Konfiguration",
+                self._init_warnings.pop(0),
+            )
+
     def _speaker_diarization_enabled(self) -> bool:
+
         return bool(self.chk_speaker_diarization.get())
 
     def _speaker_count(self) -> int:
@@ -512,16 +533,47 @@ class AudioTranscriptionApp(ctk.CTk):
         self.status_label.configure(text=f"Status: {message}")
 
     def _backend_config(self) -> dict[str, Any]:
+        backend_key = self._normalize_backend_selection()
         return {
-            "backend": self._settings.backend,
-            "options": self._settings.backend_options,
+            "backend": backend_key,
+                        "options": self._settings.backend_options,
         }
+
+
+
+
+
+
+
+
+    def _normalize_backend_selection(self) -> str:
+        backend_key = self._settings.backend
+        if backend_key not in _ALLOWED_BACKEND_KEYS:
+            backend_key = _ALLOWED_BACKEND_KEYS[0]
+            self._settings.backend = backend_key
+            self._settings.backend_options = {}
+            save_settings(self._settings)
+        return backend_key
 
     def _create_backend_from_settings(self):
         config = self._backend_config()
-        backend = self.backend_factory.create_backend(config)
-        backend.initialize()
-        return backend
+        try:
+            backend = self.backend_factory.create_backend(config)
+            backend.initialize()
+            return backend
+        except BackendConfigurationError as exc:
+            self._init_warnings.append(
+                f"{exc}\nBackend zurückgesetzt auf '{_ALLOWED_BACKEND_KEYS[0]}' und wird neu geladen."
+            )
+            self._settings.backend = _ALLOWED_BACKEND_KEYS[0]
+            self._settings.backend_options = {}
+            save_settings(self._settings)
+            config = self._backend_config()
+            backend = self.backend_factory.create_backend(config)
+            backend.initialize()
+            return backend
+
+
 
     def _on_backend_selected(self, backend_key: str) -> None:
         if backend_key == self._settings.backend:
