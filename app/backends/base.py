@@ -1,10 +1,10 @@
-"""Gemeinsame Typen und Basisschnittstelle für Transkriptions-Backends."""
+"""Gemeinsame Typen und Schnittstelle für Transkriptions-Backends."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 
@@ -33,22 +33,17 @@ class TranscriptionResult:
 
 
 class TranscriptionBackend(ABC):
-    """Schnittstelle für austauschbare Transkriptions-Backends."""
+    """Basisschnittstelle für austauschbare Transkriptions-Backends."""
 
     MODEL_SIZES: tuple[str, ...] = ()
-    EXECUTION_MODES: tuple[str, ...] = ()
+    EXECUTION_MODES: tuple[str, ...] = ("cpu",)
 
-    @classmethod
-    def available_model_sizes(cls) -> list[str]:
-        return list(cls.MODEL_SIZES)
+    def __init__(self, *, config: dict[str, Any] | None = None) -> None:
+        self._config = config or {}
 
-    @classmethod
-    def available_execution_modes(cls) -> list[str]:
-        return list(cls.EXECUTION_MODES)
-
-    @classmethod
-    def cuda_diagnostic_report(cls) -> str:
-        return "Diagnostics are not supported for this backend."
+    def initialize(self) -> None:
+        """Bereite das Backend vor (z. B. Modell laden)."""
+        return None
 
     @abstractmethod
     def transcribe(
@@ -64,7 +59,31 @@ class TranscriptionBackend(ABC):
         on_progress: Callable[[str], None] | None = None,
     ) -> TranscriptionResult:
         """Transkribiere das gegebene Audiosignal."""
-        raise NotImplementedError("Transcription backend must implement 'transcribe' method.")
+        raise NotImplementedError("Transcription backend must implement 'transcribe'.")
+
+    @classmethod
+    def get_available_models(cls) -> list[str]:
+        return list(cls.MODEL_SIZES)
+
+    @classmethod
+    def available_execution_modes(cls) -> list[str]:
+        return list(cls.EXECUTION_MODES)
+
+    @classmethod
+    def supports_gpu(cls) -> bool:
+        return False
+
+    @classmethod
+    def supports_diarization(cls) -> bool:
+        return False
+
+    @classmethod
+    def supports_vad(cls) -> bool:
+        return False
+
+    def cleanup(self) -> None:
+        """Räume genutzte Ressourcen auf."""
+        return None
 
 
 __all__ = [

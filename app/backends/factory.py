@@ -4,20 +4,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from .azure_openai_backend import AzureOpenAIBackend
-from .faster_whisper_backend import FasterWhisperBackend
-from .openai_backend import OpenAIBackend
-from .whisper_cpp_backend import WhisperCppBackend
-from core.transcription import TranscriptionBackend
+from app.backends.base import TranscriptionBackend
+from app.backends.azure_openai_backend import AzureOpenAIBackend
+from app.backends.faster_whisper_backend import FasterWhisperBackend
+from app.backends.openai_backend import OpenAIBackend
+from app.backends.whisper_cpp_backend import WhisperCppBackend
 
 
-class TranscriptionBackendFactory:
+class BackendFactory:
     DEFAULT_BACKEND = "faster_whisper"
     _BACKENDS: dict[str, type[TranscriptionBackend]] = {
         "faster_whisper": FasterWhisperBackend,
+        "whispercpp": WhisperCppBackend,
         "whisper_cpp": WhisperCppBackend,
         "openai": OpenAIBackend,
         "azure_openai": AzureOpenAIBackend,
+        "azure-openai": AzureOpenAIBackend,
     }
 
     def __init__(self, *, default_backend: str | None = None) -> None:
@@ -28,7 +30,8 @@ class TranscriptionBackendFactory:
         backend_cls = self._BACKENDS.get(key)
         if backend_cls is None:
             raise ValueError(f"Unbekanntes Transkriptions-Backend: {key}")
-        return backend_cls()
+        options = (config or {}).get("options") or {}
+        return backend_cls(config=options)
 
     def available_backends(self) -> list[str]:
         return list(self._BACKENDS.keys())
@@ -42,4 +45,4 @@ class TranscriptionBackendFactory:
         return self._default_backend
 
 
-__all__ = ["TranscriptionBackendFactory"]
+__all__ = ["BackendFactory"]

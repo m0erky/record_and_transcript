@@ -7,20 +7,23 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox
-from typing import Callable
+from typing import Any, Callable
+
 
 
 import customtkinter as ctk
 import numpy as np
 
+from app.backends.factory import BackendFactory
+from app.settings import AppSettings, load_settings, save_settings
 from app.waveform import WaveformCanvas
 from app.widgets import labeled_checkbox, labeled_option_menu
 from core.audio_player import AudioPlayer
 from core.audio_processor import AudioProcessor, EnhancementOptions
 from core.audio_recorder import AudioRecorder, RecordingConfig, SAMPLE_RATE
-from core.backends.factory import TranscriptionBackendFactory
 from core.docx_exporter import default_title, export_to_docx
 from core.storage import SessionStorage
+
 
 
 
@@ -37,10 +40,13 @@ class AudioTranscriptionApp(ctk.CTk):
 
         self.recorder = AudioRecorder(sample_rate=SAMPLE_RATE)
         self.player = AudioPlayer(sample_rate=SAMPLE_RATE)
+
         self.processor = AudioProcessor(sample_rate=SAMPLE_RATE)
-        self.backend_factory = TranscriptionBackendFactory()
-        self.transcriber = self.backend_factory.create_backend()
+        self._settings: AppSettings = load_settings()
+        self.backend_factory = BackendFactory()
+        self.transcriber = self._create_backend_from_settings()
         self.storage = SessionStorage()
+
 
 
         self.raw_audio = np.array([], dtype=np.float32)
@@ -83,6 +89,8 @@ class AudioTranscriptionApp(ctk.CTk):
 
         settings_frame.grid_columnconfigure(3, weight=1)
         settings_frame.grid_columnconfigure(4, weight=0)
+        settings_frame.grid_columnconfigure(5, weight=0)
+
 
 
         mic_label, self.device_menu = labeled_option_menu(
@@ -95,19 +103,37 @@ class AudioTranscriptionApp(ctk.CTk):
         mic_label.grid(row=0, column=0, padx=12, pady=10, sticky="w")
         self.device_menu.grid(row=0, column=1, padx=12, pady=10, sticky="ew")
 
+        model_values = list(self.transcriber.MODEL_SIZES) or ["small"]
+        preferred_model = self._settings.backend_options.get("model_size", "small")
+
+        if preferred_model not in model_values:
+            preferred_model = model_values[0]
         model_label, self.model_menu = labeled_option_menu(
             settings_frame,
-
             "Whisper-Modell:",
-            values=list(self.transcriber.MODEL_SIZES),
-            default="small",
+            values=model_values,
+            default=preferred_model,
             width=160,
         )
 
         model_label.grid(row=0, column=2, padx=12, pady=10, sticky="w")
         self.model_menu.grid(row=0, column=3, padx=12, pady=10, sticky="ew")
 
+        backend_values = self.backend_factory.available_backends()
+        backend_default = self._settings.backend if self._settings.backend in backend_values else backend_values[0]
+        backend_label, self.backend_menu = labeled_option_menu(
+            settings_frame,
+            "Transkriptions-Backend:",
+            values=backend_values,
+            default=backend_default,
+            width=220,
+        )
+        backend_label.grid(row=0, column=4, padx=12, pady=10, sticky="w")
+        self.backend_menu.grid(row=0, column=5, padx=12, pady=10, sticky="ew")
+        self.backend_menu.configure(command=self._on_backend_selected)
+
         lang_label, self.language_menu = labeled_option_menu(
+
 
             settings_frame,
             "Sprache:",
@@ -118,13 +144,19 @@ class AudioTranscriptionApp(ctk.CTk):
         lang_label.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="w")
         self.language_menu.grid(row=1, column=1, padx=12, pady=(0, 8), sticky="w")
 
+        execution_values = self.transcriber.available_execution_modes()
+        execution_default = self._settings.backend_options.get("execution_mode", "auto")
+
+        if execution_default not in execution_values:
+            execution_default = execution_values[0]
         execution_label, self.execution_menu = labeled_option_menu(
             settings_frame,
             "Rechenmodus:",
-            values=self.transcriber.available_execution_modes(),
-            default="auto",
+            values=execution_values,
+            default=execution_default,
             width=160,
         )
+
 
         execution_label.grid(row=1, column=2, padx=12, pady=(0, 8), sticky="w")
 
@@ -357,9 +389,11 @@ class AudioTranscriptionApp(ctk.CTk):
             width=150,
         ).pack(side="left", padx=12, pady=12)
 
+        self._refresh_backend_dependent_controls()
 
     
     def _set_loopback_enabled(self, enabled: bool) -> None:
+
 
 
         state = "normal" if enabled else "disabled"
@@ -477,11 +511,53 @@ class AudioTranscriptionApp(ctk.CTk):
     def _set_status(self, message: str) -> None:
         self.status_label.configure(text=f"Status: {message}")
 
-    def _show_cuda_diagnostics(self) -> None:
-        report = type(self.transcriber).cuda_diagnostic_report()
+    def _backend_config(self) -> dict[str, Any]:
+        return {
+            "backend": self._settings.backend,
+            "options": self._settings.backend_options,
+        }
 
+    def _create_backend_from_settings(self):
+        config = self._backend_config()
+        backend = self.backend_factory.create_backend(config)
+        backend.initialize()
+        return backend
+
+    def _on_backend_selected(self, backend_key: str) -> None:
+        if backend_key == self._settings.backend:
+            return
+        self.transcriber.cleanup()
+        self._settings.backend = backend_key
+        self._settings.backend_options = {}
+        save_settings(self._settings)
+        self.transcriber = self._create_backend_from_settings()
+        self._refresh_backend_dependent_controls()
+        self._set_status(f"Backend gewechselt zu {backend_key}")
+
+    def _refresh_backend_dependent_controls(self) -> None:
+        model_values = list(self.transcriber.MODEL_SIZES) or ["small"]
+        self.model_menu.configure(values=model_values)
+        if self.model_menu.get() not in model_values:
+            self.model_menu.set(model_values[0])
+        execution_values = self.transcriber.available_execution_modes()
+        if execution_values:
+            self.execution_menu.configure(values=execution_values)
+            if self.execution_menu.get() not in execution_values:
+                self.execution_menu.set(execution_values[0])
+        backend_supports_gpu = type(self.transcriber).supports_gpu()
+        state = "normal" if backend_supports_gpu else "disabled"
+        self.cuda_diagnostic_button.configure(state=state)
+
+    def _show_cuda_diagnostics(self) -> None:
+
+        diag_provider = getattr(type(self.transcriber), "cuda_diagnostic_report", None)
+        if diag_provider and type(self.transcriber).supports_gpu():
+            report = diag_provider()
+        else:
+            report = "CUDA-Diagnose ist für dieses Backend nicht verfügbar."
 
         dialog = ctk.CTkToplevel(self)
+
         dialog.title("CUDA-Diagnose")
         dialog.geometry("760x560")
         dialog.minsize(680, 480)
@@ -1000,6 +1076,7 @@ class AudioTranscriptionApp(ctk.CTk):
 
     def _build_metadata(self) -> dict[str, str]:
         metadata = {
+
             "Datum": datetime.now().strftime("%d.%m.%Y %H:%M"),
             "Mikrofon": self.device_menu.get(),
             "Whisper-Modell": self.model_menu.get(),
@@ -1007,8 +1084,10 @@ class AudioTranscriptionApp(ctk.CTk):
             "Rechenmodus": self.execution_menu.get(),
             "Dauer (s)": f"{len(self.raw_audio) / SAMPLE_RATE:.1f}",
         }
+        metadata["Backend"] = self._settings.backend
 
         if self._source_audio_path is not None:
+
             metadata["Quelldatei"] = str(self._source_audio_path)
         if bool(self.chk_system_audio.get()):
             metadata["System-Audio"] = self.loopback_menu.get()

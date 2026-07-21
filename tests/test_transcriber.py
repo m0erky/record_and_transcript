@@ -12,8 +12,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from core.backends.faster_whisper_backend import FasterWhisperBackend
-from core.transcription import SpeechRegion, TranscriptSegment
+from app.backends.faster_whisper_backend import FasterWhisperBackend
+from app.backends.base import SpeechRegion, TranscriptSegment
 
 
 class FasterWhisperBackendTests(unittest.TestCase):
@@ -87,7 +87,7 @@ class FasterWhisperBackendTests(unittest.TestCase):
                 raise RuntimeError("cublas64_12.dll cannot be loaded")
             raise AssertionError("CPU fallback must not be attempted")
 
-        with patch("core.backends.faster_whisper_backend.WhisperModel", side_effect=fake_whisper_model):
+        with patch("app.backends.faster_whisper_backend.WhisperModel", side_effect=fake_whisper_model):
             with self.assertRaises(RuntimeError) as ctx:
                 self.transcriber._ensure_model("tiny", "cuda")
 
@@ -105,11 +105,11 @@ class FasterWhisperBackendTests(unittest.TestCase):
                 added_paths.append(path)
                 return object()
 
-            with patch("core.backends.faster_whisper_backend.sys.platform", "win32"), patch.dict(
-                "core.backends.faster_whisper_backend.os.environ",
+            with patch("app.backends.faster_whisper_backend.sys.platform", "win32"), patch.dict(
+                "app.backends.faster_whisper_backend.os.environ",
                 {"CUDA_PATH": str(cuda_root)},
                 clear=True,
-            ), patch("core.backends.faster_whisper_backend.os.add_dll_directory", side_effect=fake_add_dll_directory), patch.object(
+            ), patch("app.backends.faster_whisper_backend.os.add_dll_directory", side_effect=fake_add_dll_directory), patch.object(
                 FasterWhisperBackend,
                 "_registered_dll_directories",
                 set(),
@@ -138,8 +138,8 @@ class FasterWhisperBackendTests(unittest.TestCase):
         audio = np.ones(16000, dtype=np.float32)
         progress_messages: list[str] = []
 
-        with patch("core.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2), patch(
-            "core.backends.faster_whisper_backend.WhisperModel",
+        with patch("app.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2), patch(
+            "app.backends.faster_whisper_backend.WhisperModel",
             side_effect=lambda *args, **kwargs: FakeCudaModel(),
         ):
             result = self.transcriber.transcribe(
@@ -170,8 +170,8 @@ class FasterWhisperBackendTests(unittest.TestCase):
 
         audio = np.ones(16000, dtype=np.float32)
 
-        with patch("core.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2), patch(
-            "core.backends.faster_whisper_backend.WhisperModel",
+        with patch("app.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2), patch(
+            "app.backends.faster_whisper_backend.WhisperModel",
             side_effect=lambda *args, **kwargs: FakeCudaModel(),
         ):
             with self.assertRaises(RuntimeError) as ctx:
@@ -187,7 +187,7 @@ class FasterWhisperBackendTests(unittest.TestCase):
             {"get_cuda_device_count": staticmethod(lambda: 1)},
         )
 
-        with patch("core.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2):
+        with patch("app.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2):
             modes = FasterWhisperBackend.available_execution_modes()
 
         self.assertEqual(modes, ["auto", "cpu", "cuda"])
@@ -203,11 +203,11 @@ class FasterWhisperBackendTests(unittest.TestCase):
             def __init__(self) -> None:
                 self.model = type("InnerModel", (), {"device": "cuda"})()
 
-        with patch("core.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2), patch(
-            "core.backends.faster_whisper_backend.WhisperModel",
+        with patch("app.backends.faster_whisper_backend.ctranslate2", fake_ctranslate2), patch(
+            "app.backends.faster_whisper_backend.WhisperModel",
             side_effect=lambda *args, **kwargs: FakeModel(),
-        ), patch("core.backends.faster_whisper_backend.sys.platform", "win32"), patch.dict(
-            "core.backends.faster_whisper_backend.os.environ",
+        ), patch("app.backends.faster_whisper_backend.sys.platform", "win32"), patch.dict(
+            "app.backends.faster_whisper_backend.os.environ",
             {"PATH": r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin"},
             clear=False,
         ):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 from faster_whisper import WhisperModel
@@ -14,7 +14,7 @@ from scipy.fftpack import dct
 from scipy.signal import spectrogram
 from scipy.spatial.distance import pdist, squareform
 
-from core.transcription import (
+from app.backends.base import (
     SpeechRegion,
     TranscriptSegment,
     TranscriptionResult,
@@ -33,10 +33,14 @@ class FasterWhisperBackend(TranscriptionBackend):
     _registered_dll_directories: set[str] = set()
     _dll_directory_handles: list[object] = []
 
-    def __init__(self) -> None:
+    def __init__(self, *, config: dict[str, Any] | None = None) -> None:
+        super().__init__(config=config)
         self._ensure_windows_cuda_runtime_paths()
         self._model: WhisperModel | None = None
         self._loaded_config: tuple[str, str, str] | None = None
+
+    def initialize(self) -> None:
+        self._ensure_windows_cuda_runtime_paths()
 
     @classmethod
     def _ensure_windows_cuda_runtime_paths(cls) -> None:  # pragma: no cover - Windows-specific
@@ -125,6 +129,18 @@ class FasterWhisperBackend(TranscriptionBackend):
     @classmethod
     def gpu_available(cls) -> bool:
         return cls._cuda_device_issue() is None
+
+    @classmethod
+    def supports_gpu(cls) -> bool:
+        return cls.gpu_available()
+
+    @classmethod
+    def supports_diarization(cls) -> bool:
+        return True
+
+    @classmethod
+    def supports_vad(cls) -> bool:
+        return True
 
     @classmethod
     def available_execution_modes(cls) -> list[str]:
@@ -218,6 +234,10 @@ class FasterWhisperBackend(TranscriptionBackend):
             transcript_segments = self._apply_speaker_diarization(audio, sample_rate, transcript_segments, max_speakers)
         full_text = self._compose_transcript_text(transcript_segments)
         return TranscriptionResult(full_text, info.language or (language or "auto"), len(audio) / sample_rate, transcript_segments)
+
+    def cleanup(self) -> None:
+        self._model = None
+        self._loaded_config = None
 
     def _collect_transcript_segments(self, whisper_segments) -> list[TranscriptSegment]:
         out: list[TranscriptSegment] = []

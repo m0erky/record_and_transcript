@@ -27,8 +27,9 @@ Die Kernverarbeitung bleibt lokal auf dem Rechner des Nutzers. Für die Hauptfun
 - `core/audio_recorder.py` nimmt Mikrofon- und optional System-Audio auf.
 - `core/audio_processor.py` verbessert Audio vor der Transkription.
 - `core/audio_player.py` spielt Audio ab und steuert Play/Pause/Seek.
-- `core/transcription.py` definiert zentrale Datentypen und die Schnittstelle für austauschbare Transkriptions-Backends.
-- `core/backends/` enthält die Implementierungen (z. B. `FasterWhisperBackend`) samt Factory zur Laufzeitwahl.
+- `app/backends/base.py` definiert zentrale Datentypen und die gemeinsame `TranscriptionBackend`-Schnittstelle.
+- `app/backends/` enthält die konkreten Backends (FasterWhisper, WhisperCpp, OpenAI, Azure OpenAI) sowie die Factory zur Laufzeitwahl.
+- `app/settings.py` verwaltet die gewünschte Backend-Konfiguration und stellt sie der Factory zur Verfügung.
 - `core/storage.py` verwaltet Sessions und Artefakte.
 - `core/docx_exporter.py` erzeugt DOCX-Dateien.
 
@@ -81,7 +82,9 @@ Wichtige Dataclasses im Projekt sind:
 - Die GUI ist funktionsfähig und strukturell bereits teilweise entkoppelt.
 - Busy-/State-Handling wurde in Hilfsfunktionen aufgeteilt.
 - Recording-, Transcription- und Ladeflüsse sind in kleinere Methoden zerlegt.
-- Die Transkriptions-Engine basiert auf `core/transcription.py` und `core/backends/`, wodurch verschiedene Backends über eine gemeinsame Factory bereitgestellt werden.
+- Die Transkriptions-Engine basiert auf `app/backends/base.py` und den konkreten `app/backends/`-Modulen; GUI und Business-Logik arbeiten ausschließlich über das `TranscriptionBackend`-Interface.
+- Backend-Auswahl und Persistenz erfolgen über `app/backends/factory.py` in Kombination mit `app/settings.py`, das die gewünschte Backend-Konfiguration speichert.
+- Neben `FasterWhisperBackend` existieren vorbereitete Stubs für `WhisperCppBackend`, `OpenAIBackend` und `AzureOpenAIBackend`.
 - Die Whisper-Transkription meldet den aktiven Rechenmodus über GUI-Statusmeldungen.
 - Es gibt einen CUDA-Diagnose-Dialog mit GPU-Erkennung, PATH-Hinweisen und echtem Modelltest.
 - Unter Windows registriert der Transcriber CUDA-DLL-Verzeichnisse vor Whisper-Aufrufen automatisch.

@@ -26,6 +26,7 @@
 - [x] CUDA-/Whisper-Fehlerdialoge so angepasst, dass die echte Backend-Exception angezeigt wird
 - [x] CUDA-DLL-Suchpfade unter Windows automatisch registriert
 - [x] Transkriptions-Backends über eine gemeinsame Schnittstelle und Factory entkoppelt
+- [x] Neue Backend-Architektur unter `app/backends/` inklusive persistenter Backend-Wahl in `app/settings.py`
 - [x] Dokumentation nach den Verifikationen aktualisiert
 
 ## Offene Folgethemen
@@ -33,6 +34,8 @@
 - Prüfen, ob heuristische Sprecher-Diarisierung für Zielanwender ausreicht oder ob ein dediziertes Modell sinnvoll wird.
 - Überlegen, ob Session-Historie, Modellverwaltung oder Exportformate als nächstes den größten Nutzen bringen.
 - Entscheiden, ob ein optionales Debug-Log für Supportfälle ergänzt werden soll.
+- Die vorbereiteten Backends für OpenAI und Azure OpenAI mit echter API-Kommunikation ausstatten.
+- Whisper.cpp-Backend mit Vulkan-Unterstützung und `transcribe`-Implementierung versehen.
 
 ## In Bearbeitung
 
