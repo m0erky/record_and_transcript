@@ -82,8 +82,9 @@ class WhisperCppBackendTests(unittest.TestCase):
         output_dir = Path(tempfile.mkdtemp())
         try:
             wave_path = Path("session.test.wav")
-            transcript_path = backend._transcript_path(output_dir, wave_path)
-            segment_path = backend._segment_file_path(output_dir, wave_path)
+            prefix = output_dir / wave_path.stem
+            transcript_path = backend._transcript_path(prefix)
+            segment_path = backend._segment_file_path(prefix)
             self.assertEqual(transcript_path.name, "session.test.txt")
             self.assertEqual(segment_path.name, "session.test.srt")
         finally:
