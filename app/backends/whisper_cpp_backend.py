@@ -111,6 +111,7 @@ class WhisperCppBackend(TranscriptionBackend):
         output_dir = Path(tempfile.mkdtemp(prefix="whispercpp_"))
         text = ""
         segments: list[TranscriptSegment] = []
+        existing_names = {child.name for child in output_dir.iterdir()}
         try:
             model_path = self._ensure_model_path_for_size(model_size)
             prefix = output_dir / temp_wave.stem
@@ -122,9 +123,9 @@ class WhisperCppBackend(TranscriptionBackend):
             message = exc.stderr.strip() if exc.stderr else str(exc)
             raise RuntimeError("Whisper.cpp ist fehlgeschlagen: %s" % message) from exc
         else:
-            transcript_path = self._transcript_path(prefix)
+            transcript_path = self._select_output_file(output_dir, existing_names, ".txt")
             text = self._load_transcript_text(transcript_path)
-            segments = self._parse_segment_file(prefix)
+            segments = self._parse_segment_file(self._select_output_file(output_dir, existing_names, ".srt", required=False))
         finally:
             temp_wave.unlink(missing_ok=True)
             shutil.rmtree(output_dir, ignore_errors=True)
@@ -247,20 +248,13 @@ class WhisperCppBackend(TranscriptionBackend):
                 response.close()
         temp_destination.replace(destination)
 
-    def _transcript_path(self, output_prefix: Path) -> Path:
-        return output_prefix.parent / f"{output_prefix.name}.txt"
-
     def _load_transcript_text(self, path: Path) -> str:
         if not path.exists():
             raise RuntimeError(f"Whisper.cpp-Ausgabedatei {path} wurde nicht erzeugt.")
         return path.read_text(encoding="utf-8")
 
-    def _segment_file_path(self, output_prefix: Path) -> Path:
-        return output_prefix.parent / f"{output_prefix.name}.srt"
-
-    def _parse_segment_file(self, output_prefix: Path) -> list[TranscriptSegment]:
-        path = self._segment_file_path(output_prefix)
-        if not path.exists():
+    def _parse_segment_file(self, path: Path | None) -> list[TranscriptSegment]:
+        if path is None or not path.exists():
             return []
         content = path.read_text(encoding="utf-8").strip()
         if not content:
@@ -284,6 +278,16 @@ class WhisperCppBackend(TranscriptionBackend):
                 continue
             segments.append(TranscriptSegment(start=start, end=end, text=text))
         return segments
+
+    def _select_output_file(self, output_dir: Path, existing_names: set[str], suffix: str, required: bool = True) -> Path | None:
+        candidates = [child for child in output_dir.iterdir() if child.suffix.lower() == suffix.lower() and child.name not in existing_names]
+        if not candidates:
+            candidates = [child for child in output_dir.iterdir() if child.suffix.lower() == suffix.lower()]
+        if not candidates:
+            if required:
+                raise RuntimeError(f"Keine Whisper.cpp-Ausgabedatei mit Endung '{suffix}' gefunden.")
+            return None
+        return max(candidates, key=lambda child: child.stat().st_mtime)
 
     def _srt_timestamp_to_seconds(self, timestamp: str) -> float:
         timestamp = timestamp.strip()

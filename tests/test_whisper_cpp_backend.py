@@ -6,7 +6,7 @@ import shutil
 import unittest
 from pathlib import Path
 from tempfile import mkdtemp
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, call, patch
 
 import numpy as np
 
@@ -35,7 +35,13 @@ class WhisperCppBackendTests(unittest.TestCase):
         })
         audio = np.ones(8_000, dtype=np.float32)
         fake_segment = TranscriptSegment(start=0.0, end=0.5, text="Hallo")
+        dummy_txt = Path("dummy.txt")
+        dummy_srt = Path("dummy.srt")
         with patch("app.backends.whisper_cpp_backend.subprocess.run") as mock_run, patch.object(
+            WhisperCppBackend,
+            "_select_output_file",
+            side_effect=[dummy_txt, dummy_srt],
+        ) as mock_select, patch.object(
             WhisperCppBackend, "_load_transcript_text", return_value="Hallo"
         ) as mock_load, patch.object(
             WhisperCppBackend,
@@ -43,6 +49,10 @@ class WhisperCppBackendTests(unittest.TestCase):
             return_value=[fake_segment],
         ) as mock_segments:
             result = backend.transcribe(audio=audio)
+        mock_select.assert_has_calls([
+            call(ANY, ANY, ".txt"),
+            call(ANY, ANY, ".srt", required=False),
+        ])
         self.assertEqual(result.text, "Hallo")
         mock_run.assert_called()
         mock_load.assert_called_once()
@@ -74,19 +84,19 @@ class WhisperCppBackendTests(unittest.TestCase):
         mock_get.assert_called_once()
         shutil.rmtree(cache_dir, ignore_errors=True)
 
-    def test_output_paths_use_stem(self) -> None:
+    def test_output_selection_favors_new_files(self) -> None:
         backend = WhisperCppBackend(config={
             "model_path": self.model_path,
             "binary_path": self.binary_path,
         })
         output_dir = Path(tempfile.mkdtemp())
         try:
-            wave_path = Path("session.test.wav")
-            prefix = output_dir / wave_path.stem
-            transcript_path = backend._transcript_path(prefix)
-            segment_path = backend._segment_file_path(prefix)
-            self.assertEqual(transcript_path.name, "session.test.txt")
-            self.assertEqual(segment_path.name, "session.test.srt")
+            existing_file = output_dir / "keep.txt"
+            existing_file.write_text("old")
+            new_file = output_dir / "session.test.txt"
+            new_file.write_text("new")
+            selected = backend._select_output_file(output_dir, {existing_file.name}, ".txt")
+            self.assertEqual(selected.name, "session.test.txt")
         finally:
             shutil.rmtree(output_dir, ignore_errors=True)
 
