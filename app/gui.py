@@ -14,8 +14,8 @@ from typing import Any, Callable
 import customtkinter as ctk
 import numpy as np
 
-from app.backends.base import BackendConfigurationError
 from app.backends.factory import BackendFactory
+
 from app.settings import AppSettings, load_settings, save_settings
 
 from app.waveform import WaveformCanvas
@@ -48,12 +48,48 @@ class AudioTranscriptionApp(ctk.CTk):
 
         self.processor = AudioProcessor(sample_rate=SAMPLE_RATE)
         self._settings: AppSettings = load_settings()
+        self._backend_dirty = False
+
+        self.azure_endpoint_var = ctk.StringVar(value=self._settings.backend_options.get("endpoint", ""))
+
+        self.azure_api_key_var = ctk.StringVar(value=self._settings.backend_options.get("api_key", ""))
+        self.azure_deployment_var = ctk.StringVar(value=self._settings.backend_options.get("deployment", ""))
+        self.azure_api_version_var = ctk.StringVar(value=self._settings.backend_options.get("api_version", "2023-05-15"))
+        self.azure_timeout_var = ctk.StringVar(value=self._settings.backend_options.get("timeout", "120"))
+        self._bind_backend_option_variable("endpoint", self.azure_endpoint_var)
+        self._bind_backend_option_variable("api_key", self.azure_api_key_var)
+        self._bind_backend_option_variable("deployment", self.azure_deployment_var)
+        self._bind_backend_option_variable("api_version", self.azure_api_version_var)
+        self._bind_backend_option_variable("timeout", self.azure_timeout_var)
+        self.azure_config_frame: ctk.CTkFrame | None = None
+
+        raw_whispercpp_use_vulkan = self._settings.backend_options.get("use_vulkan")
+        if isinstance(raw_whispercpp_use_vulkan, str):
+            raw_whispercpp_use_vulkan = raw_whispercpp_use_vulkan.lower() not in ("false", "0", "no")
+        elif raw_whispercpp_use_vulkan is None:
+            raw_whispercpp_use_vulkan = True
+        self.whispercpp_model_path_var = ctk.StringVar(value=self._settings.backend_options.get("model_path", ""))
+        self.whispercpp_binary_path_var = ctk.StringVar(value=self._settings.backend_options.get("binary_path", ""))
+        threads_option = self._settings.backend_options.get("threads")
+        self.whispercpp_threads_var = ctk.StringVar(value=str(threads_option) if threads_option is not None else "2")
+        self.whispercpp_vulkan_device_var = ctk.StringVar(value=self._settings.backend_options.get("vulkan_device", ""))
+        self.whispercpp_use_vulkan_var = ctk.BooleanVar(value=bool(raw_whispercpp_use_vulkan))
+        self._bind_backend_option_variable("model_path", self.whispercpp_model_path_var)
+        self._bind_backend_option_variable("binary_path", self.whispercpp_binary_path_var)
+        self._bind_backend_option_variable("threads", self.whispercpp_threads_var)
+        self._bind_backend_option_variable("vulkan_device", self.whispercpp_vulkan_device_var)
+        self._bind_backend_option_variable("use_vulkan", self.whispercpp_use_vulkan_var)
+        self.whispercpp_config_frame: ctk.CTkFrame | None = None
         self.backend_factory = BackendFactory()
+
+
         self.transcriber = self._create_backend_from_settings()
         self.storage = SessionStorage()
-        self._init_warnings: list[str] = []
+
 
         self.raw_audio = np.array([], dtype=np.float32)
+
+
 
         self.enhanced_audio: np.ndarray | None = None
         self.transcript_text = ""
@@ -69,13 +105,14 @@ class AudioTranscriptionApp(ctk.CTk):
             on_position_change=self._on_player_position,
             on_finished=self._on_player_finished,
         )
-
+        
         self._build_ui()
         self._refresh_devices()
+        self._update_azure_config_visibility()
 
-
-        self._show_init_warnings()
         self._set_status("Bereit")
+
+
 
 
     def _build_ui(self) -> None:
@@ -231,7 +268,148 @@ class AudioTranscriptionApp(ctk.CTk):
         self._loopback_label = loopback_label
         self._set_loopback_enabled(False)
 
+        self.azure_config_frame = ctk.CTkFrame(settings_frame)
+        self.azure_config_frame.grid_columnconfigure(1, weight=1)
+        self.azure_config_frame.grid(row=4, column=0, columnspan=6, padx=12, pady=(10, 6), sticky="ew")
+
+        azure_title = ctk.CTkLabel(
+            self.azure_config_frame,
+            text="Azure OpenAI",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        azure_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(2, 6))
+
+        endpoint_label = ctk.CTkLabel(self.azure_config_frame, text="Endpoint:")
+        endpoint_label.grid(row=1, column=0, sticky="w")
+        ctk.CTkEntry(
+            self.azure_config_frame,
+            textvariable=self.azure_endpoint_var,
+            width=360,
+        ).grid(row=1, column=1, sticky="ew", padx=(8, 0))
+
+        deployment_label = ctk.CTkLabel(self.azure_config_frame, text="Deployment-Name:")
+        deployment_label.grid(row=2, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.azure_config_frame,
+            textvariable=self.azure_deployment_var,
+            width=360,
+        ).grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=(4, 0))
+
+        api_key_label = ctk.CTkLabel(self.azure_config_frame, text="API-Key:")
+        api_key_label.grid(row=3, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.azure_config_frame,
+            textvariable=self.azure_api_key_var,
+            show="•",
+            width=360,
+        ).grid(row=3, column=1, sticky="ew", padx=(8, 0), pady=(4, 0))
+
+        api_version_label = ctk.CTkLabel(self.azure_config_frame, text="API-Version:")
+        api_version_label.grid(row=4, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.azure_config_frame,
+            textvariable=self.azure_api_version_var,
+            width=180,
+        ).grid(row=4, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+
+        timeout_label = ctk.CTkLabel(self.azure_config_frame, text="Timeout (s):")
+        timeout_label.grid(row=5, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.azure_config_frame,
+            textvariable=self.azure_timeout_var,
+            width=120,
+        ).grid(row=5, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+
+        self.azure_test_button = ctk.CTkButton(
+            self.azure_config_frame,
+            text="Azure-Daten testen",
+            command=self._test_azure_configuration,
+            width=200,
+        )
+        self.azure_test_button.grid(row=6, column=0, columnspan=2, pady=(8, 0))
+
+        self.whispercpp_config_frame = ctk.CTkFrame(settings_frame)
+        self.whispercpp_config_frame.grid_columnconfigure(1, weight=1)
+        self.whispercpp_config_frame.grid_columnconfigure(2, weight=0)
+        self.whispercpp_config_frame.grid(row=5, column=0, columnspan=6, padx=12, pady=(10, 6), sticky="ew")
+
+        whisper_title = ctk.CTkLabel(
+            self.whispercpp_config_frame,
+            text="Whisper.cpp",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        whisper_title.grid(row=0, column=0, columnspan=3, sticky="w", pady=(2, 6))
+
+        model_label = ctk.CTkLabel(self.whispercpp_config_frame, text="Modell (ggml):")
+        model_label.grid(row=1, column=0, sticky="w")
+        ctk.CTkEntry(
+            self.whispercpp_config_frame,
+            textvariable=self.whispercpp_model_path_var,
+            width=360,
+        ).grid(row=1, column=1, sticky="ew", padx=(8, 0))
+        ctk.CTkButton(
+            self.whispercpp_config_frame,
+            text="Datei wählen",
+            command=lambda: self._choose_file_for_var(
+                self.whispercpp_model_path_var,
+                "Whisper.cpp Modell wählen",
+                [("Whisper-Modell", "*.bin *.ggml"), ("Alle Dateien", "*.*")],
+            ),
+            width=140,
+        ).grid(row=1, column=2, padx=(8, 0))
+
+        binary_label = ctk.CTkLabel(self.whispercpp_config_frame, text="Binary: (optional)")
+        binary_label.grid(row=2, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.whispercpp_config_frame,
+            textvariable=self.whispercpp_binary_path_var,
+            width=360,
+        ).grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=(4, 0))
+        ctk.CTkButton(
+            self.whispercpp_config_frame,
+            text="Datei wählen",
+            command=lambda: self._choose_file_for_var(
+                self.whispercpp_binary_path_var,
+                "Whisper.cpp Binary wählen",
+                [("Programm", "*.*")],
+            ),
+            width=140,
+        ).grid(row=2, column=2, padx=(8, 0), pady=(4, 0))
+
+        threads_label = ctk.CTkLabel(self.whispercpp_config_frame, text="Threads:")
+        threads_label.grid(row=3, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.whispercpp_config_frame,
+            textvariable=self.whispercpp_threads_var,
+            width=120,
+        ).grid(row=3, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+
+        self.whispercpp_use_vulkan_checkbox = ctk.CTkCheckBox(
+            self.whispercpp_config_frame,
+            text="Vulkan verwenden",
+            variable=self.whispercpp_use_vulkan_var,
+        )
+        self.whispercpp_use_vulkan_checkbox.grid(row=4, column=0, columnspan=2, pady=(4, 0), sticky="w")
+
+        vulkan_device_label = ctk.CTkLabel(self.whispercpp_config_frame, text="Vulkan Device (optional):")
+        vulkan_device_label.grid(row=5, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.whispercpp_config_frame,
+            textvariable=self.whispercpp_vulkan_device_var,
+            width=260,
+        ).grid(row=5, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+
+        self.whispercpp_test_button = ctk.CTkButton(
+            self.whispercpp_config_frame,
+            text="Whisper.cpp testen",
+            command=self._test_whispercpp_configuration,
+            width=220,
+        )
+        self.whispercpp_test_button.grid(row=6, column=0, columnspan=3, pady=(8, 0))
+
         enhance_frame = ctk.CTkFrame(self)
+
+
         enhance_frame.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
         enhance_frame.grid_columnconfigure(4, weight=1)
 
@@ -405,8 +583,9 @@ class AudioTranscriptionApp(ctk.CTk):
 
         self._refresh_backend_dependent_controls()
 
-    
+
     def _set_loopback_enabled(self, enabled: bool) -> None:
+
 
 
         state = "normal" if enabled else "disabled"
@@ -416,16 +595,125 @@ class AudioTranscriptionApp(ctk.CTk):
         )
 
 
-    def _show_init_warnings(self) -> None:
-        while self._init_warnings:
-            messagebox.showwarning(
-                "Backend-Konfiguration",
-                self._init_warnings.pop(0),
-            )
+    
+
+    def _bind_backend_option_variable(self, key: str, var: Any) -> None:
+        var.trace_add("write", lambda *_: self._set_backend_option(key, var.get()))
+
+    def _set_backend_option(self, key: str, value: Any) -> None:
+        if isinstance(value, str):
+            normalized = value.strip()
+            if normalized:
+                self._settings.backend_options[key] = normalized
+            else:
+                self._settings.backend_options.pop(key, None)
+        elif value is None:
+            self._settings.backend_options.pop(key, None)
+        else:
+            self._settings.backend_options[key] = value
+        if self._settings.backend in {"azure_openai", "whispercpp"}:
+            self._backend_dirty = True
+        save_settings(self._settings)
+
+
+
+    def _choose_file_for_var(
+        self,
+        var: ctk.StringVar,
+        title: str,
+        filetypes: list[tuple[str, str]] | None = None,
+    ) -> None:
+        path = filedialog.askopenfilename(
+            title=title,
+            filetypes=filetypes or [("Alle Dateien", "*.*")],
+        )
+        if path:
+            var.set(path)
+
+
+    def _azure_backend_option_values(self) -> dict[str, str]:
+        values = {
+            "endpoint": self.azure_endpoint_var.get().strip(),
+            "api_key": self.azure_api_key_var.get().strip(),
+            "deployment": self.azure_deployment_var.get().strip(),
+            "api_version": self.azure_api_version_var.get().strip(),
+            "timeout": self.azure_timeout_var.get().strip(),
+        }
+        return {key: val for key, val in values.items() if val}
+
+
+    def _test_azure_configuration(self) -> None:
+        config = {
+            "backend": "azure_openai",
+            "options": self._azure_backend_option_values(),
+        }
+        backend = None
+        try:
+            backend = self.backend_factory.create_backend(config)
+            backend.initialize()
+        except Exception as exc:
+            messagebox.showerror("Azure-Test", f"Fehler: {exc}")
+            return
+        finally:
+            if backend is not None:
+                backend.cleanup()
+        messagebox.showinfo("Azure-Test", "Konfiguration ist gültig und wurde initialisiert.")
+
+    def _update_azure_config_visibility(self) -> None:
+        if self.azure_config_frame is None:
+            return
+        if self._settings.backend == "azure_openai":
+            self.azure_config_frame.grid()
+        else:
+            self.azure_config_frame.grid_remove()
+
+    def _whispercpp_backend_option_values(self) -> dict[str, Any]:
+        values: dict[str, Any] = {}
+        model_path = self.whispercpp_model_path_var.get().strip()
+        if model_path:
+            values["model_path"] = model_path
+        binary_path = self.whispercpp_binary_path_var.get().strip()
+        if binary_path:
+            values["binary_path"] = binary_path
+        threads = self.whispercpp_threads_var.get().strip()
+        if threads:
+            values["threads"] = threads
+        vulkan_device = self.whispercpp_vulkan_device_var.get().strip()
+        if vulkan_device:
+            values["vulkan_device"] = vulkan_device
+        values["use_vulkan"] = bool(self.whispercpp_use_vulkan_var.get())
+        return values
+
+    def _test_whispercpp_configuration(self) -> None:
+        config = {
+            "backend": "whispercpp",
+            "options": self._whispercpp_backend_option_values(),
+        }
+        backend = None
+        try:
+            backend = self.backend_factory.create_backend(config)
+            backend.initialize()
+        except Exception as exc:
+            messagebox.showerror("Whisper.cpp-Test", f"Fehler: {exc}")
+            return
+        finally:
+            if backend is not None:
+                backend.cleanup()
+        messagebox.showinfo("Whisper.cpp-Test", "Konfiguration ist gültig und wurde initialisiert.")
+
+    def _update_whispercpp_config_visibility(self) -> None:
+        if self.whispercpp_config_frame is None:
+            return
+        if self._settings.backend == "whispercpp":
+            self.whispercpp_config_frame.grid()
+        else:
+            self.whispercpp_config_frame.grid_remove()
 
     def _speaker_diarization_enabled(self) -> bool:
 
+
         return bool(self.chk_speaker_diarization.get())
+
 
     def _speaker_count(self) -> int:
         return int(self.speaker_count_menu.get())
@@ -532,21 +820,30 @@ class AudioTranscriptionApp(ctk.CTk):
     def _set_status(self, message: str) -> None:
         self.status_label.configure(text=f"Status: {message}")
 
+    def _ensure_backend_is_current(self) -> None:
+        if not self._backend_dirty:
+            return
+        self.transcriber.cleanup()
+        self.transcriber = self._create_backend_from_settings()
+        self._backend_dirty = False
+
     def _backend_config(self) -> dict[str, Any]:
+
         backend_key = self._normalize_backend_selection()
+        options: dict[str, Any] = dict(self._settings.backend_options)
+        if backend_key == "azure_openai":
+            options.update(self._azure_backend_option_values())
+        if backend_key == "whispercpp":
+            options.update(self._whispercpp_backend_option_values())
         return {
             "backend": backend_key,
-                        "options": self._settings.backend_options,
+            "options": options,
         }
 
 
 
-
-
-
-
-
     def _normalize_backend_selection(self) -> str:
+
         backend_key = self._settings.backend
         if backend_key not in _ALLOWED_BACKEND_KEYS:
             backend_key = _ALLOWED_BACKEND_KEYS[0]
@@ -557,21 +854,10 @@ class AudioTranscriptionApp(ctk.CTk):
 
     def _create_backend_from_settings(self):
         config = self._backend_config()
-        try:
-            backend = self.backend_factory.create_backend(config)
-            backend.initialize()
-            return backend
-        except BackendConfigurationError as exc:
-            self._init_warnings.append(
-                f"{exc}\nBackend zurückgesetzt auf '{_ALLOWED_BACKEND_KEYS[0]}' und wird neu geladen."
-            )
-            self._settings.backend = _ALLOWED_BACKEND_KEYS[0]
-            self._settings.backend_options = {}
-            save_settings(self._settings)
-            config = self._backend_config()
-            backend = self.backend_factory.create_backend(config)
-            backend.initialize()
-            return backend
+        return self.backend_factory.create_backend(config)
+
+
+
 
 
 
@@ -581,10 +867,17 @@ class AudioTranscriptionApp(ctk.CTk):
         self.transcriber.cleanup()
         self._settings.backend = backend_key
         self._settings.backend_options = {}
+
         save_settings(self._settings)
         self.transcriber = self._create_backend_from_settings()
+        self._backend_dirty = False
+
         self._refresh_backend_dependent_controls()
-        self._set_status(f"Backend gewechselt zu {backend_key}")
+
+        self.backend_menu.set(self._settings.backend)
+        self._set_status(f"Backend gewechselt zu {self._settings.backend}")
+
+
 
     def _refresh_backend_dependent_controls(self) -> None:
         model_values = list(self.transcriber.MODEL_SIZES) or ["small"]
@@ -592,15 +885,18 @@ class AudioTranscriptionApp(ctk.CTk):
         if self.model_menu.get() not in model_values:
             self.model_menu.set(model_values[0])
         execution_values = self.transcriber.available_execution_modes()
+        backend_supports_gpu = type(self.transcriber).supports_gpu()
         if execution_values:
             self.execution_menu.configure(values=execution_values)
             if self.execution_menu.get() not in execution_values:
                 self.execution_menu.set(execution_values[0])
-        backend_supports_gpu = type(self.transcriber).supports_gpu()
         state = "normal" if backend_supports_gpu else "disabled"
         self.cuda_diagnostic_button.configure(state=state)
+        self._update_azure_config_visibility()
+        self._update_whispercpp_config_visibility()
 
     def _show_cuda_diagnostics(self) -> None:
+
 
         diag_provider = getattr(type(self.transcriber), "cuda_diagnostic_report", None)
         if diag_provider and type(self.transcriber).supports_gpu():
@@ -953,8 +1249,12 @@ class AudioTranscriptionApp(ctk.CTk):
             messagebox.showwarning("Hinweis", "Bitte zuerst eine Aufnahme erstellen oder laden.")
             return
 
+        self._ensure_backend_is_current()
+
         if self._worker and self._worker.is_alive():
             return
+
+
 
         speaker_diarization, max_speakers = self._transcription_settings()
 

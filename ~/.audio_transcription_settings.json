@@ -1,0 +1,4 @@
+{
+  "backend": "faster_whisper",
+  "backend_options": {}
+}
