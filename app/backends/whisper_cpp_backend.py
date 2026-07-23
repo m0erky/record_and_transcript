@@ -113,8 +113,7 @@ class WhisperCppBackend(TranscriptionBackend):
         segments: list[TranscriptSegment] = []
         try:
             model_path = self._ensure_model_path_for_size(model_size)
-            prefix = output_dir / temp_wave.stem
-            cmd = self._build_command(prefix, temp_wave, language, model_path, execution_mode)
+            cmd = self._build_command(output_dir, temp_wave, language, model_path, execution_mode)
             if on_progress:
                 on_progress("Whisper.cpp wird gestartet...")
             subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -122,9 +121,9 @@ class WhisperCppBackend(TranscriptionBackend):
             message = exc.stderr.strip() if exc.stderr else str(exc)
             raise RuntimeError("Whisper.cpp ist fehlgeschlagen: %s" % message) from exc
         else:
-            transcript_path = self._transcript_path(prefix)
+            transcript_path = self._find_output_file(output_dir, temp_wave.stem, ".txt")
             text = self._load_transcript_text(transcript_path)
-            segments = self._parse_segment_file(prefix)
+            segments = self._parse_segment_file(output_dir, temp_wave.stem)
         finally:
             temp_wave.unlink(missing_ok=True)
             shutil.rmtree(output_dir, ignore_errors=True)
@@ -158,7 +157,7 @@ class WhisperCppBackend(TranscriptionBackend):
 
     def _build_command(
         self,
-        output_prefix: Path,
+        output_dir: Path,
         wave_path: Path,
         language: str | None,
         model_path: Path,
@@ -171,7 +170,7 @@ class WhisperCppBackend(TranscriptionBackend):
             "-f",
             str(wave_path),
             "-o",
-            str(output_prefix),
+            str(output_dir),
             "-otxt",
             "-osrt",
             "-t",
@@ -193,9 +192,6 @@ class WhisperCppBackend(TranscriptionBackend):
                 f"Unbekannter Whisper.cpp-Ausführungsmodus: {execution_mode!r}"
             )
         return cmd
-
-    def _transcript_path(self, output_prefix: Path) -> Path:
-        return output_prefix.parent / f"{output_prefix.name}.txt"
 
     def _load_transcript_text(self, path: Path) -> str:
         if not path.exists():
@@ -255,11 +251,11 @@ class WhisperCppBackend(TranscriptionBackend):
                 response.close()
         temp_destination.replace(destination)
 
-    def _segment_file_path(self, output_prefix: Path) -> Path:
-        return output_prefix.parent / f"{output_prefix.name}.srt"
-
-    def _parse_segment_file(self, output_prefix: Path) -> list[TranscriptSegment]:
-        path = self._segment_file_path(output_prefix)
+    def _parse_segment_file(self, output_dir: Path, stem: str) -> list[TranscriptSegment]:
+        try:
+            path = self._find_output_file(output_dir, stem, ".srt")
+        except RuntimeError:
+            return []
         if not path.exists():
             return []
         content = path.read_text(encoding="utf-8").strip()
@@ -297,6 +293,18 @@ class WhisperCppBackend(TranscriptionBackend):
         seconds = int(seconds_str)
         milliseconds = int(milliseconds_str)
         return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000.0
+
+    def _find_output_file(self, output_dir: Path, stem: str, suffix: str) -> Path:
+        candidate = output_dir / f"{stem}{suffix}"
+        if candidate.exists():
+            return candidate
+        matches = sorted(output_dir.glob(f"{stem}*{suffix}"))
+        if matches:
+            return matches[0]
+        matches = sorted(output_dir.glob(f"*{suffix}"))
+        if matches:
+            return matches[0]
+        raise RuntimeError(f"Keine Whisper.cpp-Ausgabedatei mit Endung '{suffix}' gefunden.")
 
     @classmethod
     def supports_gpu(cls) -> bool:
