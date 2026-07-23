@@ -35,10 +35,7 @@ class WhisperCppBackendTests(unittest.TestCase):
         })
         audio = np.ones(8_000, dtype=np.float32)
         fake_segment = TranscriptSegment(start=0.0, end=0.5, text="Hallo")
-        dummy_path = Path("dummy.txt")
         with patch("app.backends.whisper_cpp_backend.subprocess.run") as mock_run, patch.object(
-            WhisperCppBackend, "_find_output_file", return_value=dummy_path
-        ) as mock_find, patch.object(
             WhisperCppBackend, "_load_transcript_text", return_value="Hallo"
         ) as mock_load, patch.object(
             WhisperCppBackend,
@@ -46,7 +43,6 @@ class WhisperCppBackendTests(unittest.TestCase):
             return_value=[fake_segment],
         ) as mock_segments:
             result = backend.transcribe(audio=audio)
-        mock_find.assert_called_once()
         self.assertEqual(result.text, "Hallo")
         mock_run.assert_called()
         mock_load.assert_called_once()
@@ -86,10 +82,11 @@ class WhisperCppBackendTests(unittest.TestCase):
         output_dir = Path(tempfile.mkdtemp())
         try:
             wave_path = Path("session.test.wav")
-            transcript_file = output_dir / "session.test.txt"
-            transcript_file.write_text("ok")
-            result = backend._find_output_file(output_dir, wave_path.stem, ".txt")
-            self.assertEqual(result.name, "session.test.txt")
+            prefix = output_dir / wave_path.stem
+            transcript_path = backend._transcript_path(prefix)
+            segment_path = backend._segment_file_path(prefix)
+            self.assertEqual(transcript_path.name, "session.test.txt")
+            self.assertEqual(segment_path.name, "session.test.srt")
         finally:
             shutil.rmtree(output_dir, ignore_errors=True)
 
