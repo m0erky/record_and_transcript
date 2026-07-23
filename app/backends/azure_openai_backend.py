@@ -8,7 +8,6 @@ from typing import Any, Callable, Mapping
 
 import numpy as np
 import requests
-import soundfile as sf
 
 from app.backends.base import TranscriptionBackend, TranscriptionResult
 
@@ -106,6 +105,10 @@ class AzureOpenAIBackend(TranscriptionBackend):
         )
 
     def _audio_to_wav(self, audio: np.ndarray, sample_rate: int) -> io.BytesIO:
+        try:
+            import soundfile as sf
+        except ImportError as exc:  # pragma: no cover - missing dependency
+            raise RuntimeError("Das Paket 'soundfile' wird für Azure OpenAI benötigt.") from exc
         buffer = io.BytesIO()
         sf.write(buffer, audio, samplerate=sample_rate, format="WAV", subtype="PCM_16")
         buffer.seek(0)

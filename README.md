@@ -77,6 +77,14 @@ transcript.docx
 - Sprecher-Unterscheidung ist aktuell heuristisch und lokal; sie eignet sich für einfache Zuordnung, ist aber nicht so präzise wie spezialisierte Diarisierung.
 - System-Audio funktioniert unter Windows über WASAPI-Loopback. Wähle dafür das Ausgabegerät, über das der Ton tatsächlich läuft.
 
+## Whisper.cpp-Backend
+
+- Wähle im Einstellungsbereich das Backend `whispercpp`, gib das passende Modell (`ggml-small.bin`, `ggml-base.bin`, `ggml-tiny.bin`) an und optional den Pfad zum `whisper.cpp`-Binary (`main`/`main.exe`, über die GitHub-Releases erhältlich unter `https://github.com/ggerganov/whisper.cpp/releases/latest`).
+- Die App speichert gewählte Modelle standardmäßig unter `models/whisper_cpp` und lädt sie beim ersten Einsatz automatisch aus dem offiziellen Hugging Face-Repository, solange in den Einstellungen `Auto-Download` aktiviert ist. Du kannst über `model_path` eine explizite Datei vorgeben oder über `model_cache_dir` einen eigenen Speicherort konfigurieren.
+- Nutze das Vulkan-Checkbox plus optionalen `--vulkan-device`, um GPU-Beschleunigung zu aktivieren; bei deaktiviertem Vulkan läuft Whisper.cpp mit CPU und der gewählten Thread-Anzahl.
+- Die Modelle und das Binary müssen vor dem ersten Transkriptionslauf vorhanden sein oder erfolgreich heruntergeladen werden, damit das Backend startet. Fehlermeldungen zeigen fehlende Dateien oder Download-Probleme direkt an.
+
+
 ## Entwicklung und Tests
 
 ```powershell
@@ -91,6 +99,5 @@ python -m unittest discover -s tests -v
 - Datei- und sessionbasiertes Speichern
 - CUDA-Diagnose und CUDA-DLL-Registrierung unter Windows vorhanden
 - Sprecher-UX und die Bewertung der heuristischen Diarisierung sind weiterhin ein offener Ausbaubereich
-
 
 
