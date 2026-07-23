@@ -194,7 +194,7 @@ class WhisperCppBackend(TranscriptionBackend):
         return cmd
 
     def _transcript_path(self, output_dir: Path, wave_path: Path) -> Path:
-        return output_dir / f"{wave_path.name}.txt"
+        return output_dir / f"{wave_path.stem}.txt"
 
     def _load_transcript_text(self, path: Path) -> str:
         if not path.exists():
@@ -255,7 +255,7 @@ class WhisperCppBackend(TranscriptionBackend):
         temp_destination.replace(destination)
 
     def _segment_file_path(self, output_dir: Path, wave_path: Path) -> Path:
-        return output_dir / f"{wave_path.name}.srt"
+        return output_dir / f"{wave_path.stem}.srt"
 
     def _parse_segment_file(self, output_dir: Path, wave_path: Path) -> list[TranscriptSegment]:
         path = self._segment_file_path(output_dir, wave_path)

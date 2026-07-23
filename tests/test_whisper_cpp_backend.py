@@ -74,6 +74,21 @@ class WhisperCppBackendTests(unittest.TestCase):
         mock_get.assert_called_once()
         shutil.rmtree(cache_dir, ignore_errors=True)
 
+    def test_output_paths_use_stem(self) -> None:
+        backend = WhisperCppBackend(config={
+            "model_path": self.model_path,
+            "binary_path": self.binary_path,
+        })
+        output_dir = Path(tempfile.mkdtemp())
+        try:
+            wave_path = Path("session.test.wav")
+            transcript_path = backend._transcript_path(output_dir, wave_path)
+            segment_path = backend._segment_file_path(output_dir, wave_path)
+            self.assertEqual(transcript_path.name, "session.test.txt")
+            self.assertEqual(segment_path.name, "session.test.srt")
+        finally:
+            shutil.rmtree(output_dir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
