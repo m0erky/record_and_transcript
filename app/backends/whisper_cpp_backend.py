@@ -123,9 +123,14 @@ class WhisperCppBackend(TranscriptionBackend):
             message = exc.stderr.strip() if exc.stderr else str(exc)
             raise RuntimeError("Whisper.cpp ist fehlgeschlagen: %s" % message) from exc
         else:
-            transcript_path = self._select_output_file(output_dir, existing_names, ".txt")
+            transcript_path = self._transcript_path(prefix)
+            if not transcript_path.exists():
+                transcript_path = self._select_output_file(output_dir, existing_names, ".txt")
             text = self._load_transcript_text(transcript_path)
-            segments = self._parse_segment_file(self._select_output_file(output_dir, existing_names, ".srt", required=False))
+            segment_path = self._segment_file_path(prefix)
+            if not segment_path.exists():
+                segment_path = self._select_output_file(output_dir, existing_names, ".srt", required=False)
+            segments = self._parse_segment_file(segment_path)
         finally:
             temp_wave.unlink(missing_ok=True)
             shutil.rmtree(output_dir, ignore_errors=True)
@@ -253,6 +258,12 @@ class WhisperCppBackend(TranscriptionBackend):
             raise RuntimeError(f"Whisper.cpp-Ausgabedatei {path} wurde nicht erzeugt.")
         return path.read_text(encoding="utf-8")
 
+    def _transcript_path(self, output_prefix: Path) -> Path:
+        return output_prefix.with_suffix(".txt")
+
+    def _segment_file_path(self, output_prefix: Path) -> Path:
+        return output_prefix.with_suffix(".srt")
+
     def _parse_segment_file(self, path: Path | None) -> list[TranscriptSegment]:
         if path is None or not path.exists():
             return []
@@ -285,7 +296,11 @@ class WhisperCppBackend(TranscriptionBackend):
             candidates = [child for child in output_dir.iterdir() if child.suffix.lower() == suffix.lower()]
         if not candidates:
             if required:
-                raise RuntimeError(f"Keine Whisper.cpp-Ausgabedatei mit Endung '{suffix}' gefunden.")
+                available = sorted(child.name for child in output_dir.iterdir())
+                raise RuntimeError(
+                    "Keine Whisper.cpp-Ausgabedatei mit Endung '{suffix}' gefunden. "
+                    f"Temp-Ordnermitglieder: {available}"
+                )
             return None
         return max(candidates, key=lambda child: child.stat().st_mtime)
 
