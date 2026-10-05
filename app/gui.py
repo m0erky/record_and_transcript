@@ -7,23 +7,38 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox
-from typing import Callable
+from typing import Any, Callable
+
 
 
 import customtkinter as ctk
 import numpy as np
 
+from app.backends.base import TranscriptSegment, TranscriptionResult
+from app.backends.factory import BackendFactory
+from app.speaker_editor import (
+    compose_transcript_text_from_segments,
+    merge_speakers_in_segments,
+    rename_speaker_in_segments,
+    speaker_names_from_segments,
+)
+from app.settings import AppSettings, load_settings, save_settings
+
 from app.waveform import WaveformCanvas
+
 from app.widgets import labeled_checkbox, labeled_option_menu
 from core.audio_player import AudioPlayer
 from core.audio_processor import AudioProcessor, EnhancementOptions
 from core.audio_recorder import AudioRecorder, RecordingConfig, SAMPLE_RATE
 from core.docx_exporter import default_title, export_to_docx
 from core.storage import SessionStorage
-from core.transcriber import WhisperTranscriber
+
+
+_ALLOWED_BACKEND_KEYS = ["faster_whisper", "whispercpp", "azure_openai"]
 
 
 class AudioTranscriptionApp(ctk.CTk):
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -36,13 +51,55 @@ class AudioTranscriptionApp(ctk.CTk):
 
         self.recorder = AudioRecorder(sample_rate=SAMPLE_RATE)
         self.player = AudioPlayer(sample_rate=SAMPLE_RATE)
+
         self.processor = AudioProcessor(sample_rate=SAMPLE_RATE)
-        self.transcriber = WhisperTranscriber()
+        self._settings: AppSettings = load_settings()
+        self._backend_dirty = False
+
+        self.azure_endpoint_var = ctk.StringVar(value=self._settings.backend_options.get("endpoint", ""))
+
+        self.azure_api_key_var = ctk.StringVar(value=self._settings.backend_options.get("api_key", ""))
+        self.azure_deployment_var = ctk.StringVar(value=self._settings.backend_options.get("deployment", ""))
+        self.azure_api_version_var = ctk.StringVar(value=self._settings.backend_options.get("api_version", "2023-05-15"))
+        self.azure_timeout_var = ctk.StringVar(value=self._settings.backend_options.get("timeout", "120"))
+        self._bind_backend_option_variable("endpoint", self.azure_endpoint_var)
+        self._bind_backend_option_variable("api_key", self.azure_api_key_var)
+        self._bind_backend_option_variable("deployment", self.azure_deployment_var)
+        self._bind_backend_option_variable("api_version", self.azure_api_version_var)
+        self._bind_backend_option_variable("timeout", self.azure_timeout_var)
+        self.azure_config_frame: ctk.CTkFrame | None = None
+
+        raw_whispercpp_use_vulkan = self._settings.backend_options.get("use_vulkan")
+        if isinstance(raw_whispercpp_use_vulkan, str):
+            raw_whispercpp_use_vulkan = raw_whispercpp_use_vulkan.lower() not in ("false", "0", "no")
+        elif raw_whispercpp_use_vulkan is None:
+            raw_whispercpp_use_vulkan = True
+        self.whispercpp_model_path_var = ctk.StringVar(value=self._settings.backend_options.get("model_path", ""))
+        self.whispercpp_binary_path_var = ctk.StringVar(value=self._settings.backend_options.get("binary_path", ""))
+        threads_option = self._settings.backend_options.get("threads")
+        self.whispercpp_threads_var = ctk.StringVar(value=str(threads_option) if threads_option is not None else "2")
+        self.whispercpp_vulkan_device_var = ctk.StringVar(value=self._settings.backend_options.get("vulkan_device", ""))
+        self.whispercpp_use_vulkan_var = ctk.BooleanVar(value=bool(raw_whispercpp_use_vulkan))
+        self._bind_backend_option_variable("model_path", self.whispercpp_model_path_var)
+        self._bind_backend_option_variable("binary_path", self.whispercpp_binary_path_var)
+        self._bind_backend_option_variable("threads", self.whispercpp_threads_var)
+        self._bind_backend_option_variable("vulkan_device", self.whispercpp_vulkan_device_var)
+        self._bind_backend_option_variable("use_vulkan", self.whispercpp_use_vulkan_var)
+        self.whispercpp_config_frame: ctk.CTkFrame | None = None
+        self.backend_factory = BackendFactory()
+
+
+        self.transcriber = self._create_backend_from_settings()
         self.storage = SessionStorage()
 
+
         self.raw_audio = np.array([], dtype=np.float32)
+
+
+
         self.enhanced_audio: np.ndarray | None = None
         self.transcript_text = ""
+        self.transcript_segments: list[TranscriptSegment] = []
         self.enhancement_steps: list[str] = []
 
         self._worker: threading.Thread | None = None
@@ -51,15 +108,19 @@ class AudioTranscriptionApp(ctk.CTk):
         self._source_audio_path: Path | None = None
 
 
-
         self.player.set_callbacks(
             on_position_change=self._on_player_position,
             on_finished=self._on_player_finished,
         )
-
+        
         self._build_ui()
         self._refresh_devices()
+        self._update_azure_config_visibility()
+
         self._set_status("Bereit")
+
+
+
 
     def _build_ui(self) -> None:
         self.grid_columnconfigure(0, weight=1)
@@ -80,6 +141,8 @@ class AudioTranscriptionApp(ctk.CTk):
 
         settings_frame.grid_columnconfigure(3, weight=1)
         settings_frame.grid_columnconfigure(4, weight=0)
+        settings_frame.grid_columnconfigure(5, weight=0)
+
 
 
         mic_label, self.device_menu = labeled_option_menu(
@@ -92,18 +155,43 @@ class AudioTranscriptionApp(ctk.CTk):
         mic_label.grid(row=0, column=0, padx=12, pady=10, sticky="w")
         self.device_menu.grid(row=0, column=1, padx=12, pady=10, sticky="ew")
 
+        model_values = list(self.transcriber.MODEL_SIZES) or ["small"]
+        preferred_model = self._settings.backend_options.get("model_size", "small")
+
+        if preferred_model not in model_values:
+            preferred_model = model_values[0]
         model_label, self.model_menu = labeled_option_menu(
             settings_frame,
-
             "Whisper-Modell:",
-            values=list(WhisperTranscriber.MODEL_SIZES),
-            default="small",
+            values=model_values,
+            default=preferred_model,
             width=160,
         )
+
         model_label.grid(row=0, column=2, padx=12, pady=10, sticky="w")
         self.model_menu.grid(row=0, column=3, padx=12, pady=10, sticky="ew")
 
+        backend_values = self.backend_factory.available_backends()
+        filtered_backend_values = [
+            backend_key for backend_key in backend_values if backend_key in _ALLOWED_BACKEND_KEYS
+        ]
+        if not filtered_backend_values:
+            filtered_backend_values = backend_values
+        backend_default = self._settings.backend if self._settings.backend in filtered_backend_values else filtered_backend_values[0]
+        backend_label, self.backend_menu = labeled_option_menu(
+            settings_frame,
+            "Transkriptions-Backend:",
+            values=filtered_backend_values,
+            default=backend_default,
+            width=220,
+        )
+
+        backend_label.grid(row=0, column=4, padx=12, pady=10, sticky="w")
+        self.backend_menu.grid(row=0, column=5, padx=12, pady=10, sticky="ew")
+        self.backend_menu.configure(command=self._on_backend_selected)
+
         lang_label, self.language_menu = labeled_option_menu(
+
 
             settings_frame,
             "Sprache:",
@@ -114,13 +202,20 @@ class AudioTranscriptionApp(ctk.CTk):
         lang_label.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="w")
         self.language_menu.grid(row=1, column=1, padx=12, pady=(0, 8), sticky="w")
 
+        execution_values = self.transcriber.available_execution_modes()
+        execution_default = self._settings.backend_options.get("execution_mode", "auto")
+
+        if execution_default not in execution_values:
+            execution_default = execution_values[0]
         execution_label, self.execution_menu = labeled_option_menu(
             settings_frame,
             "Rechenmodus:",
-            values=WhisperTranscriber.available_execution_modes(),
-            default="auto",
+            values=execution_values,
+            default=execution_default,
             width=160,
         )
+
+
         execution_label.grid(row=1, column=2, padx=12, pady=(0, 8), sticky="w")
 
         self.execution_menu.grid(row=1, column=3, padx=12, pady=(0, 8), sticky="w")
@@ -180,7 +275,148 @@ class AudioTranscriptionApp(ctk.CTk):
         self._loopback_label = loopback_label
         self._set_loopback_enabled(False)
 
+        self.azure_config_frame = ctk.CTkFrame(settings_frame)
+        self.azure_config_frame.grid_columnconfigure(1, weight=1)
+        self.azure_config_frame.grid(row=4, column=0, columnspan=6, padx=12, pady=(10, 6), sticky="ew")
+
+        azure_title = ctk.CTkLabel(
+            self.azure_config_frame,
+            text="Azure OpenAI",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        azure_title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(2, 6))
+
+        endpoint_label = ctk.CTkLabel(self.azure_config_frame, text="Endpoint:")
+        endpoint_label.grid(row=1, column=0, sticky="w")
+        ctk.CTkEntry(
+            self.azure_config_frame,
+            textvariable=self.azure_endpoint_var,
+            width=360,
+        ).grid(row=1, column=1, sticky="ew", padx=(8, 0))
+
+        deployment_label = ctk.CTkLabel(self.azure_config_frame, text="Deployment-Name:")
+        deployment_label.grid(row=2, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.azure_config_frame,
+            textvariable=self.azure_deployment_var,
+            width=360,
+        ).grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=(4, 0))
+
+        api_key_label = ctk.CTkLabel(self.azure_config_frame, text="API-Key:")
+        api_key_label.grid(row=3, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.azure_config_frame,
+            textvariable=self.azure_api_key_var,
+            show="•",
+            width=360,
+        ).grid(row=3, column=1, sticky="ew", padx=(8, 0), pady=(4, 0))
+
+        api_version_label = ctk.CTkLabel(self.azure_config_frame, text="API-Version:")
+        api_version_label.grid(row=4, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.azure_config_frame,
+            textvariable=self.azure_api_version_var,
+            width=180,
+        ).grid(row=4, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+
+        timeout_label = ctk.CTkLabel(self.azure_config_frame, text="Timeout (s):")
+        timeout_label.grid(row=5, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.azure_config_frame,
+            textvariable=self.azure_timeout_var,
+            width=120,
+        ).grid(row=5, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+
+        self.azure_test_button = ctk.CTkButton(
+            self.azure_config_frame,
+            text="Azure-Daten testen",
+            command=self._test_azure_configuration,
+            width=200,
+        )
+        self.azure_test_button.grid(row=6, column=0, columnspan=2, pady=(8, 0))
+
+        self.whispercpp_config_frame = ctk.CTkFrame(settings_frame)
+        self.whispercpp_config_frame.grid_columnconfigure(1, weight=1)
+        self.whispercpp_config_frame.grid_columnconfigure(2, weight=0)
+        self.whispercpp_config_frame.grid(row=5, column=0, columnspan=6, padx=12, pady=(10, 6), sticky="ew")
+
+        whisper_title = ctk.CTkLabel(
+            self.whispercpp_config_frame,
+            text="Whisper.cpp",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        whisper_title.grid(row=0, column=0, columnspan=3, sticky="w", pady=(2, 6))
+
+        model_label = ctk.CTkLabel(self.whispercpp_config_frame, text="Modell (ggml):")
+        model_label.grid(row=1, column=0, sticky="w")
+        ctk.CTkEntry(
+            self.whispercpp_config_frame,
+            textvariable=self.whispercpp_model_path_var,
+            width=360,
+        ).grid(row=1, column=1, sticky="ew", padx=(8, 0))
+        ctk.CTkButton(
+            self.whispercpp_config_frame,
+            text="Datei wählen",
+            command=lambda: self._choose_file_for_var(
+                self.whispercpp_model_path_var,
+                "Whisper.cpp Modell wählen",
+                [("Whisper-Modell", "*.bin *.ggml"), ("Alle Dateien", "*.*")],
+            ),
+            width=140,
+        ).grid(row=1, column=2, padx=(8, 0))
+
+        binary_label = ctk.CTkLabel(self.whispercpp_config_frame, text="Binary: (optional)")
+        binary_label.grid(row=2, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.whispercpp_config_frame,
+            textvariable=self.whispercpp_binary_path_var,
+            width=360,
+        ).grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=(4, 0))
+        ctk.CTkButton(
+            self.whispercpp_config_frame,
+            text="Datei wählen",
+            command=lambda: self._choose_file_for_var(
+                self.whispercpp_binary_path_var,
+                "Whisper.cpp Binary wählen",
+                [("Programm", "*.*")],
+            ),
+            width=140,
+        ).grid(row=2, column=2, padx=(8, 0), pady=(4, 0))
+
+        threads_label = ctk.CTkLabel(self.whispercpp_config_frame, text="Threads:")
+        threads_label.grid(row=3, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.whispercpp_config_frame,
+            textvariable=self.whispercpp_threads_var,
+            width=120,
+        ).grid(row=3, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+
+        self.whispercpp_use_vulkan_checkbox = ctk.CTkCheckBox(
+            self.whispercpp_config_frame,
+            text="Vulkan verwenden",
+            variable=self.whispercpp_use_vulkan_var,
+        )
+        self.whispercpp_use_vulkan_checkbox.grid(row=4, column=0, columnspan=2, pady=(4, 0), sticky="w")
+
+        vulkan_device_label = ctk.CTkLabel(self.whispercpp_config_frame, text="Vulkan Device (optional):")
+        vulkan_device_label.grid(row=5, column=0, sticky="w", pady=(4, 0))
+        ctk.CTkEntry(
+            self.whispercpp_config_frame,
+            textvariable=self.whispercpp_vulkan_device_var,
+            width=260,
+        ).grid(row=5, column=1, sticky="w", padx=(8, 0), pady=(4, 0))
+
+        self.whispercpp_test_button = ctk.CTkButton(
+            self.whispercpp_config_frame,
+            text="Whisper.cpp testen",
+            command=self._test_whispercpp_configuration,
+            width=220,
+        )
+        self.whispercpp_test_button.grid(row=6, column=0, columnspan=3, pady=(8, 0))
+
         enhance_frame = ctk.CTkFrame(self)
+
+
         enhance_frame.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
         enhance_frame.grid_columnconfigure(4, weight=1)
 
@@ -320,8 +556,74 @@ class AudioTranscriptionApp(ctk.CTk):
         self.textbox = ctk.CTkTextbox(self, wrap="word")
         self.textbox.grid(row=6, column=0, padx=20, pady=(0, 10), sticky="nsew")
 
+        speaker_frame = ctk.CTkFrame(self)
+        speaker_frame.grid(row=7, column=0, padx=20, pady=(0, 10), sticky="ew")
+        speaker_frame.grid_columnconfigure(5, weight=1)
+
+        speaker_title = ctk.CTkLabel(
+            speaker_frame,
+            text="Sprecher bearbeiten",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        speaker_title.grid(row=0, column=0, padx=12, pady=(12, 4), sticky="w")
+
+        self.speaker_info_label = ctk.CTkLabel(
+            speaker_frame,
+            text="Keine Sprecherdaten vorhanden.",
+            text_color="gray",
+        )
+        self.speaker_info_label.grid(row=0, column=1, columnspan=5, padx=12, pady=(12, 4), sticky="w")
+
+        source_label = ctk.CTkLabel(speaker_frame, text="Sprecher:")
+        source_label.grid(row=1, column=0, padx=(12, 6), pady=(4, 12), sticky="w")
+
+        self.speaker_source_menu = ctk.CTkOptionMenu(
+            speaker_frame,
+            values=["Keine Sprecher"],
+            command=self._on_speaker_source_selected,
+            width=170,
+            state="disabled",
+        )
+        self.speaker_source_menu.set("Keine Sprecher")
+        self.speaker_source_menu.grid(row=1, column=1, padx=(0, 8), pady=(4, 12), sticky="w")
+
+        self.speaker_name_entry = ctk.CTkEntry(
+            speaker_frame,
+            placeholder_text="Neuer Name",
+            width=180,
+            state="disabled",
+        )
+        self.speaker_name_entry.grid(row=1, column=2, padx=8, pady=(4, 12), sticky="w")
+
+        self.rename_speaker_button = ctk.CTkButton(
+            speaker_frame,
+            text="Umbenennen",
+            command=self._rename_selected_speaker,
+            width=120,
+            state="disabled",
+        )
+        self.rename_speaker_button.grid(row=1, column=3, padx=8, pady=(4, 12), sticky="w")
+
+        self.speaker_target_menu = ctk.CTkOptionMenu(
+            speaker_frame,
+            values=["Keine Ziele"],
+            width=170,
+            state="disabled",
+        )
+        self.speaker_target_menu.set("Keine Ziele")
+        self.speaker_target_menu.grid(row=1, column=4, padx=8, pady=(4, 12), sticky="w")
+
+        self.merge_speaker_button = ctk.CTkButton(
+            speaker_frame,
+            text="Zusammenführen",
+            command=self._merge_selected_speaker,
+            width=140,
+            state="disabled",
+        )
+        self.merge_speaker_button.grid(row=1, column=5, padx=(8, 12), pady=(4, 12), sticky="w")
+
         save_frame = ctk.CTkFrame(self)
-        save_frame.grid(row=7, column=0, padx=20, pady=(0, 20), sticky="ew")
+        save_frame.grid(row=8, column=0, padx=20, pady=(0, 20), sticky="ew")
 
         ctk.CTkButton(
             save_frame,
@@ -352,9 +654,12 @@ class AudioTranscriptionApp(ctk.CTk):
             width=150,
         ).pack(side="left", padx=12, pady=12)
 
+        self._refresh_backend_dependent_controls()
+        self._refresh_speaker_editor_controls()
 
-    
+
     def _set_loopback_enabled(self, enabled: bool) -> None:
+
 
 
         state = "normal" if enabled else "disabled"
@@ -364,8 +669,125 @@ class AudioTranscriptionApp(ctk.CTk):
         )
 
 
+    
+
+    def _bind_backend_option_variable(self, key: str, var: Any) -> None:
+        var.trace_add("write", lambda *_: self._set_backend_option(key, var.get()))
+
+    def _set_backend_option(self, key: str, value: Any) -> None:
+        if isinstance(value, str):
+            normalized = value.strip()
+            if normalized:
+                self._settings.backend_options[key] = normalized
+            else:
+                self._settings.backend_options.pop(key, None)
+        elif value is None:
+            self._settings.backend_options.pop(key, None)
+        else:
+            self._settings.backend_options[key] = value
+        if self._settings.backend in {"azure_openai", "whispercpp"}:
+            self._backend_dirty = True
+        save_settings(self._settings)
+
+
+
+    def _choose_file_for_var(
+        self,
+        var: ctk.StringVar,
+        title: str,
+        filetypes: list[tuple[str, str]] | None = None,
+    ) -> None:
+        path = filedialog.askopenfilename(
+            title=title,
+            filetypes=filetypes or [("Alle Dateien", "*.*")],
+        )
+        if path:
+            var.set(path)
+
+
+    def _azure_backend_option_values(self) -> dict[str, str]:
+        values = {
+            "endpoint": self.azure_endpoint_var.get().strip(),
+            "api_key": self.azure_api_key_var.get().strip(),
+            "deployment": self.azure_deployment_var.get().strip(),
+            "api_version": self.azure_api_version_var.get().strip(),
+            "timeout": self.azure_timeout_var.get().strip(),
+        }
+        return {key: val for key, val in values.items() if val}
+
+
+    def _test_azure_configuration(self) -> None:
+        config = {
+            "backend": "azure_openai",
+            "options": self._azure_backend_option_values(),
+        }
+        backend = None
+        try:
+            backend = self.backend_factory.create_backend(config)
+            backend.initialize()
+        except Exception as exc:
+            messagebox.showerror("Azure-Test", f"Fehler: {exc}")
+            return
+        finally:
+            if backend is not None:
+                backend.cleanup()
+        messagebox.showinfo("Azure-Test", "Konfiguration ist gültig und wurde initialisiert.")
+
+    def _update_azure_config_visibility(self) -> None:
+        if self.azure_config_frame is None:
+            return
+        if self._settings.backend == "azure_openai":
+            self.azure_config_frame.grid()
+        else:
+            self.azure_config_frame.grid_remove()
+
+    def _whispercpp_backend_option_values(self) -> dict[str, Any]:
+        values: dict[str, Any] = {}
+        model_path = self.whispercpp_model_path_var.get().strip()
+        if model_path:
+            values["model_path"] = model_path
+        binary_path = self.whispercpp_binary_path_var.get().strip()
+        if binary_path:
+            values["binary_path"] = binary_path
+        threads = self.whispercpp_threads_var.get().strip()
+        if threads:
+            values["threads"] = threads
+        vulkan_device = self.whispercpp_vulkan_device_var.get().strip()
+        if vulkan_device:
+            values["vulkan_device"] = vulkan_device
+        values["use_vulkan"] = bool(self.whispercpp_use_vulkan_var.get())
+        return values
+
+    def _test_whispercpp_configuration(self) -> None:
+        config = {
+            "backend": "whispercpp",
+            "options": self._whispercpp_backend_option_values(),
+        }
+        backend = None
+        try:
+            backend = self.backend_factory.create_backend(config)
+            backend.initialize()
+        except Exception as exc:
+            messagebox.showerror("Whisper.cpp-Test", f"Fehler: {exc}")
+            return
+        finally:
+            if backend is not None:
+                backend.cleanup()
+        messagebox.showinfo("Whisper.cpp-Test", "Konfiguration ist gültig und wurde initialisiert.")
+
+    def _update_whispercpp_config_visibility(self) -> None:
+        if self.whispercpp_config_frame is None:
+            return
+        if self._settings.backend == "whispercpp":
+            self.whispercpp_config_frame.grid()
+        else:
+            self.whispercpp_config_frame.grid_remove()
+
     def _speaker_diarization_enabled(self) -> bool:
+
+
         return bool(self.chk_speaker_diarization.get())
+
 
     def _speaker_count(self) -> int:
         return int(self.speaker_count_menu.get())
@@ -387,6 +809,106 @@ class AudioTranscriptionApp(ctk.CTk):
 
     def _toggle_speaker_diarization(self) -> None:
         self._set_speaker_controls_enabled(self._speaker_diarization_enabled())
+
+    def _set_speaker_editor_enabled(self, enabled: bool) -> None:
+        state = "normal" if enabled else "disabled"
+        self.speaker_source_menu.configure(state=state)
+        self.speaker_name_entry.configure(state=state)
+        self.rename_speaker_button.configure(state=state)
+        self.speaker_target_menu.configure(state=state)
+        self.merge_speaker_button.configure(state=state)
+
+    def _on_speaker_source_selected(self, _value: str) -> None:
+        self._refresh_merge_target_options()
+
+    def _refresh_merge_target_options(self) -> None:
+        names = speaker_names_from_segments(self.transcript_segments)
+        source = self.speaker_source_menu.get()
+        target_values = [name for name in names if name != source]
+        if not target_values:
+            self.speaker_target_menu.configure(values=["Kein Ziel verfügbar"], state="disabled")
+            self.speaker_target_menu.set("Kein Ziel verfügbar")
+            self.merge_speaker_button.configure(state="disabled")
+            return
+        self.speaker_target_menu.configure(values=target_values, state="normal")
+        if self.speaker_target_menu.get() not in target_values:
+            self.speaker_target_menu.set(target_values[0])
+        self.merge_speaker_button.configure(state="normal")
+
+    def _refresh_speaker_editor_controls(self) -> None:
+        names = speaker_names_from_segments(self.transcript_segments)
+        if not names:
+            self.speaker_info_label.configure(text="Keine Sprecherdaten vorhanden.", text_color="gray")
+            self.speaker_source_menu.configure(values=["Keine Sprecher"], state="disabled")
+            self.speaker_source_menu.set("Keine Sprecher")
+            self.speaker_name_entry.delete(0, "end")
+            self.speaker_name_entry.configure(state="disabled")
+            self.rename_speaker_button.configure(state="disabled")
+            self.speaker_target_menu.configure(values=["Keine Ziele"], state="disabled")
+            self.speaker_target_menu.set("Keine Ziele")
+            self.merge_speaker_button.configure(state="disabled")
+            return
+        self.speaker_info_label.configure(
+            text=f"Gefundene Sprecher: {', '.join(names)}",
+            text_color=("gray10", "gray90"),
+        )
+        self.speaker_source_menu.configure(values=names, state="normal")
+        if self.speaker_source_menu.get() not in names:
+            self.speaker_source_menu.set(names[0])
+        self.speaker_name_entry.configure(state="normal")
+        self.rename_speaker_button.configure(state="normal")
+        self._refresh_merge_target_options()
+
+    def _update_transcript_from_segments(self) -> None:
+        self.transcript_text = compose_transcript_text_from_segments(self.transcript_segments)
+        self.textbox.delete("1.0", "end")
+        self.textbox.insert("1.0", self.transcript_text)
+
+    def _rename_selected_speaker(self) -> None:
+        old_name = self.speaker_source_menu.get().strip()
+        new_name = self.speaker_name_entry.get().strip()
+        if not old_name or old_name == "Keine Sprecher":
+            return
+        if not new_name:
+            messagebox.showwarning("Hinweis", "Bitte einen neuen Namen eingeben.")
+            return
+        if new_name == old_name:
+            messagebox.showwarning("Hinweis", "Der neue Name ist identisch mit dem aktuellen Namen.")
+            return
+        existing = set(speaker_names_from_segments(self.transcript_segments))
+        if new_name in existing:
+            merge_confirmed = messagebox.askyesno(
+                "Sprecher zusammenführen",
+                f"'{new_name}' existiert bereits. Soll '{old_name}' in '{new_name}' zusammengeführt werden?",
+            )
+            if not merge_confirmed:
+                return
+        self.transcript_segments = rename_speaker_in_segments(
+            self.transcript_segments,
+            old_name=old_name,
+            new_name=new_name,
+        )
+        self.speaker_name_entry.delete(0, "end")
+        self._update_transcript_from_segments()
+        self._refresh_speaker_editor_controls()
+        self._set_status(f"Sprecher umbenannt: {old_name} → {new_name}")
+
+    def _merge_selected_speaker(self) -> None:
+        source_name = self.speaker_source_menu.get().strip()
+        target_name = self.speaker_target_menu.get().strip()
+        if not source_name or not target_name:
+            return
+        if source_name == target_name:
+            messagebox.showwarning("Hinweis", "Bitte unterschiedliche Sprecher auswählen.")
+            return
+        self.transcript_segments = merge_speakers_in_segments(
+            self.transcript_segments,
+            source_name=source_name,
+            target_name=target_name,
+        )
+        self._update_transcript_from_segments()
+        self._refresh_speaker_editor_controls()
+        self._set_status(f"Sprecher zusammengeführt: {source_name} → {target_name}")
 
     def _toggle_system_audio(self) -> None:
         enabled = bool(self.chk_system_audio.get())
@@ -472,10 +994,100 @@ class AudioTranscriptionApp(ctk.CTk):
     def _set_status(self, message: str) -> None:
         self.status_label.configure(text=f"Status: {message}")
 
+    def _ensure_backend_is_current(self) -> None:
+        if not self._backend_dirty:
+            return
+        self.transcriber.cleanup()
+        self.transcriber = self._create_backend_from_settings()
+        self._backend_dirty = False
+
+    def _backend_config(self) -> dict[str, Any]:
+
+        backend_key = self._normalize_backend_selection()
+        options: dict[str, Any] = dict(self._settings.backend_options)
+        if backend_key == "azure_openai":
+            options.update(self._azure_backend_option_values())
+        if backend_key == "whispercpp":
+            options.update(self._whispercpp_backend_option_values())
+        return {
+            "backend": backend_key,
+            "options": options,
+        }
+
+
+
+    def _normalize_backend_selection(self) -> str:
+
+        backend_key = self._settings.backend
+        if backend_key not in _ALLOWED_BACKEND_KEYS:
+            backend_key = _ALLOWED_BACKEND_KEYS[0]
+            self._settings.backend = backend_key
+            self._settings.backend_options = {}
+            save_settings(self._settings)
+        return backend_key
+
+    def _create_backend_from_settings(self):
+        config = self._backend_config()
+        return self.backend_factory.create_backend(config)
+
+
+
+
+
+
+    def _on_backend_selected(self, backend_key: str) -> None:
+        if backend_key == self._settings.backend:
+            return
+        self.transcriber.cleanup()
+        self._settings.backend = backend_key
+        self._settings.backend_options = {}
+
+        save_settings(self._settings)
+        self.transcriber = self._create_backend_from_settings()
+        self._backend_dirty = False
+
+        self._refresh_backend_dependent_controls()
+
+        self.backend_menu.set(self._settings.backend)
+        self._set_status(f"Backend gewechselt zu {self._settings.backend}")
+
+
+
+    def _refresh_backend_dependent_controls(self) -> None:
+        model_values = list(self.transcriber.MODEL_SIZES) or ["small"]
+        self.model_menu.configure(values=model_values)
+        if self.model_menu.get() not in model_values:
+            self.model_menu.set(model_values[0])
+        execution_values = self.transcriber.available_execution_modes()
+        backend_supports_gpu = type(self.transcriber).supports_gpu()
+        backend_supports_diarization = type(self.transcriber).supports_diarization()
+        if execution_values:
+            self.execution_menu.configure(values=execution_values)
+            if self.execution_menu.get() not in execution_values:
+                self.execution_menu.set(execution_values[0])
+        state = "normal" if backend_supports_gpu else "disabled"
+        self.cuda_diagnostic_button.configure(state=state)
+        speaker_state = "normal" if backend_supports_diarization else "disabled"
+        self.chk_speaker_diarization.configure(state=speaker_state)
+        if not backend_supports_diarization:
+            self.chk_speaker_diarization.deselect()
+            self._set_speaker_controls_enabled(False)
+        else:
+            self._set_speaker_controls_enabled(self._speaker_diarization_enabled())
+        self._update_azure_config_visibility()
+        self._update_whispercpp_config_visibility()
+
     def _show_cuda_diagnostics(self) -> None:
-        report = WhisperTranscriber.cuda_diagnostic_report()
+
+
+        diag_provider = getattr(type(self.transcriber), "cuda_diagnostic_report", None)
+        if diag_provider and type(self.transcriber).supports_gpu():
+            report = diag_provider()
+        else:
+            report = "CUDA-Diagnose ist für dieses Backend nicht verfügbar."
 
         dialog = ctk.CTkToplevel(self)
+
         dialog.title("CUDA-Diagnose")
         dialog.geometry("760x560")
         dialog.minsize(680, 480)
@@ -545,11 +1157,13 @@ class AudioTranscriptionApp(ctk.CTk):
 
         self.enhanced_audio = None
         self.transcript_text = ""
+        self.transcript_segments = []
         self.enhancement_steps = []
         self._source_audio_path = None
         self.enhance_info.configure(text="Noch keine Verbesserung angewendet.")
         self.textbox.delete("1.0", "end")
         self.progress.set(0)
+        self._refresh_speaker_editor_controls()
         if reset_preview_source:
             self.preview_source_menu.set("Aufnahme")
 
@@ -612,6 +1226,11 @@ class AudioTranscriptionApp(ctk.CTk):
                 self.chk_high_pass,
                 self.chk_noise_reduce,
                 self.chk_auto_enhance,
+                self.speaker_source_menu,
+                self.speaker_name_entry,
+                self.rename_speaker_button,
+                self.speaker_target_menu,
+                self.merge_speaker_button,
             ],
             state,
         )
@@ -619,12 +1238,14 @@ class AudioTranscriptionApp(ctk.CTk):
         if busy:
             self.pause_record_button.configure(state="disabled")
             self._set_speaker_controls_enabled(False)
+            self._set_speaker_editor_enabled(False)
             return
 
         self._sync_recording_controls()
         self._set_speaker_controls_enabled(
             self._speaker_diarization_enabled() and not self.recorder.is_recording
         )
+        self._refresh_speaker_editor_controls()
 
 
 
@@ -819,8 +1440,12 @@ class AudioTranscriptionApp(ctk.CTk):
             messagebox.showwarning("Hinweis", "Bitte zuerst eine Aufnahme erstellen oder laden.")
             return
 
+        self._ensure_backend_is_current()
+
         if self._worker and self._worker.is_alive():
             return
+
+
 
         speaker_diarization, max_speakers = self._transcription_settings()
 
@@ -846,19 +1471,24 @@ class AudioTranscriptionApp(ctk.CTk):
                 self.after(0, lambda message=error_message: self._on_transcribe_error(message))
                 return
 
-            self.after(0, lambda: self._on_transcribe_done(result.text))
+            self.after(0, lambda: self._on_transcribe_done(result))
 
         self._start_worker(work)
 
 
-    def _on_transcribe_done(self, text: str) -> None:
+    def _on_transcribe_done(self, result: TranscriptionResult) -> None:
         self._worker = None
-        self.transcript_text = text
+        self.transcript_segments = list(result.segments)
+        if self.transcript_segments:
+            self.transcript_text = compose_transcript_text_from_segments(self.transcript_segments)
+        else:
+            self.transcript_text = result.text
 
         self.textbox.delete("1.0", "end")
-        self.textbox.insert("1.0", text)
+        self.textbox.insert("1.0", self.transcript_text)
         self.progress.set(1.0)
         self._set_busy(False)
+        self._refresh_speaker_editor_controls()
         self._set_status("Transkription abgeschlossen")
 
     def _on_transcribe_error(self, message: str) -> None:
@@ -954,8 +1584,12 @@ class AudioTranscriptionApp(ctk.CTk):
         self.storage.save_wav(Path(path), self.enhanced_audio, SAMPLE_RATE)
         messagebox.showinfo("Gespeichert", f"Verbesserte Aufnahme gespeichert:\n{path}")
 
+    def _current_transcript_text(self) -> str:
+        return self.textbox.get("1.0", "end").strip()
+
     def _export_docx(self) -> None:
-        if not self.transcript_text.strip():
+        transcript = self._current_transcript_text()
+        if not transcript:
             messagebox.showwarning("Hinweis", "Kein Transkript zum Exportieren vorhanden.")
             return
 
@@ -967,8 +1601,9 @@ class AudioTranscriptionApp(ctk.CTk):
         if not path:
             return
 
+        self.transcript_text = transcript
         export_to_docx(
-            text=self.transcript_text,
+            text=transcript,
             output_path=Path(path),
             title=default_title(),
             metadata=self._build_metadata(),
@@ -979,14 +1614,16 @@ class AudioTranscriptionApp(ctk.CTk):
         if self.raw_audio.size == 0:
             messagebox.showwarning("Hinweis", "Keine Aufnahme vorhanden.")
             return
-        if not self.transcript_text.strip():
+        transcript = self._current_transcript_text()
+        if not transcript:
             messagebox.showwarning("Hinweis", "Kein Transkript vorhanden.")
             return
 
+        self.transcript_text = transcript
         session = self.storage.save_all(
             raw_audio=self.raw_audio,
             enhanced_audio=self.enhanced_audio,
-            transcript=self.transcript_text,
+            transcript=transcript,
             sample_rate=SAMPLE_RATE,
             metadata=self._build_metadata(),
         )
@@ -994,6 +1631,7 @@ class AudioTranscriptionApp(ctk.CTk):
 
     def _build_metadata(self) -> dict[str, str]:
         metadata = {
+
             "Datum": datetime.now().strftime("%d.%m.%Y %H:%M"),
             "Mikrofon": self.device_menu.get(),
             "Whisper-Modell": self.model_menu.get(),
@@ -1001,8 +1639,10 @@ class AudioTranscriptionApp(ctk.CTk):
             "Rechenmodus": self.execution_menu.get(),
             "Dauer (s)": f"{len(self.raw_audio) / SAMPLE_RATE:.1f}",
         }
+        metadata["Backend"] = self._settings.backend
 
         if self._source_audio_path is not None:
+
             metadata["Quelldatei"] = str(self._source_audio_path)
         if bool(self.chk_system_audio.get()):
             metadata["System-Audio"] = self.loopback_menu.get()

@@ -1,5 +1,37 @@
 # CHANGELOG.md
 
+## 2026-10-05
+
+### Sprecher-UX-MVP im UI
+
+- In `app/gui.py` wurde ein Sprecher-Editor ergänzt, der erkannte Sprecher direkt im UI anzeigt.
+- Sprecher können umbenannt oder zusammengeführt werden; die Änderungen aktualisieren das Transkript sofort.
+- Für manuelle Korrekturen wird beim Export/Speichern der aktuelle Inhalt des editierbaren Transkriptfelds übernommen.
+- Die Verarbeitung der Sprecher-Operationen wurde in `app/speaker_editor.py` zentralisiert.
+- Neue Tests in `tests/test_speaker_editor.py` prüfen Sprecherliste, Umbenennung, Zusammenführung und Textformatierung.
+
+## 2026-07-21
+
+### Modularisierung und Backend-Konfiguration
+
+- Die gesamte Transkriptions-Architektur wurde von `core/backends/` nach `app/backends/` verschoben; dort beherbergen `base.py`, die konkreten Backends und die Factory nun die Schnittstelle und Implementierungen.
+- `app/backends/base.py` definiert die `TranscriptionBackend`-Schnittstelle samt Datentypen, das Backend-Interface selbst wurde um `initialize`, `supports_*` und `cleanup` erweitert.
+- `app/settings.py` speichert die gewünschte Backend-Auswahl im Nutzerordner, die GUI bietet eine Option zur Laufzeitwahl und lädt die Konfiguration beim Start.
+- `WhisperCppBackend` und `OpenAIBackend` liefern vorbereitete Stubs; `AzureOpenAIBackend` nutzt eine echte API-Integration (WAV-Upload via `requests`, Konfigurationsprüfung, Azure-Endpoint/Deployment). `FasterWhisperBackend` ist auf die neue Struktur angepasst und bietet weiterhin CUDA-Diagnose sowie Diarisierung.
+- `requests` wurde als Abhängigkeit ergänzt, damit die Azure-Schnittstelle Audio per Multipart an Azure OpenAI schicken kann.
+- Neue Tests für `BackendFactory` und `AzureOpenAIBackend` verifizieren Backend-Auswahl, Option-Passage und API-Antwortverarbeitung.
+- Die Tests wurden auf die neuen Pfade angepasst, und die GUI greift ausschließlich über das Interface auf die Backends zu.
+
+## 2026-07-20
+
+### Modularisierung der Transkriptions-Backends
+
+- Die bisher monolithische `core/transcriber.py` wurde aufgelöst. Stattdessen bieten `core/transcription.py` und das Verzeichnis `core/backends/` eine gemeinsame Schnittstelle plus konkrete Backends.
+- `FasterWhisperBackend` verwaltet weiterhin die Whisper-Logik sowie CUDA-Diagnosen, lebt aber jetzt in einem dedizierten Backend-Modul.
+- `TranscriptionBackendFactory` ermöglicht die Auswahl eines Backends über Konfiguration, während die GUI und Business-Logik nur die gemeinsame Schnittstelle nutzen.
+- Stubs für `WhisperCppBackend`, `OpenAIBackend` und `AzureOpenAIBackend` wurden ergänzt, um zukünftige Erweiterungen vorzubereiten.
+- Die GUI importiert nun die Factory und nutzt deren Standard-Backend; Tests wurden entsprechend auf `FasterWhisperBackend` aktualisiert.
+
 ## 2026-07-17
 
 ### CUDA-Transkriptionslogging

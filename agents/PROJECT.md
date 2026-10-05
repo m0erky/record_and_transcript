@@ -22,18 +22,22 @@ Die Kernverarbeitung bleibt lokal auf dem Rechner des Nutzers. Für die Hauptfun
 - `app/gui.py` enthält Hauptfenster, Bedienlogik und Zustandssteuerung.
 - `app/waveform.py` zeichnet die Wellenform und die Abspielposition.
 - `app/widgets.py` bündelt kleine UI-Hilfen.
+- `app/speaker_editor.py` kapselt Sprecher-Operationen (Namen ermitteln, Umbenennen, Zusammenführen, Textformatierung).
 
 ### Fachlogik
 - `core/audio_recorder.py` nimmt Mikrofon- und optional System-Audio auf.
 - `core/audio_processor.py` verbessert Audio vor der Transkription.
 - `core/audio_player.py` spielt Audio ab und steuert Play/Pause/Seek.
-- `core/transcriber.py` lädt Whisper, transkribiert Audio und erzeugt optional heuristische Sprecherzuordnungen.
+- `app/backends/base.py` definiert zentrale Datentypen und die gemeinsame `TranscriptionBackend`-Schnittstelle.
+- `app/backends/` enthält die konkreten Backends (FasterWhisper, WhisperCpp, OpenAI, Azure OpenAI) sowie die Factory zur Laufzeitwahl.
+- `app/settings.py` verwaltet die gewünschte Backend-Konfiguration und stellt sie der Factory zur Verfügung.
 - `core/storage.py` verwaltet Sessions und Artefakte.
 - `core/docx_exporter.py` erzeugt DOCX-Dateien.
 
 ### Tests
 - `tests/test_gui_smoke.py` prüft Modulimporte ohne Fenster.
 - `tests/test_transcriber.py` deckt Kernpfade der Transcriber- und Sprecherlogik ab.
+- `tests/test_backend_factory.py`, `tests/test_azure_openai_backend.py` und `tests/test_whisper_cpp_backend.py` verifizieren die Factory-Auswahl sowie die Azure- und Whisper.cpp-Backends.
 
 ## Datenmodell und Speicherung
 
@@ -80,16 +84,20 @@ Wichtige Dataclasses im Projekt sind:
 - Die GUI ist funktionsfähig und strukturell bereits teilweise entkoppelt.
 - Busy-/State-Handling wurde in Hilfsfunktionen aufgeteilt.
 - Recording-, Transcription- und Ladeflüsse sind in kleinere Methoden zerlegt.
+- Die Transkriptions-Engine basiert auf `app/backends/base.py` und den konkreten `app/backends/`-Modulen; GUI und Business-Logik arbeiten ausschließlich über das `TranscriptionBackend`-Interface.
+- Backend-Auswahl und Persistenz erfolgen über `app/backends/factory.py` in Kombination mit `app/settings.py`, das die gewünschte Backend-Konfiguration speichert.
+- Neben `FasterWhisperBackend` existieren vorbereitete Stubs für `WhisperCppBackend` und `OpenAIBackend`; `AzureOpenAIBackend` nutzt bereits die echte Azure-API and `requests`.
 - Die Whisper-Transkription meldet den aktiven Rechenmodus über GUI-Statusmeldungen.
 - Es gibt einen CUDA-Diagnose-Dialog mit GPU-Erkennung, PATH-Hinweisen und echtem Modelltest.
 - Unter Windows registriert der Transcriber CUDA-DLL-Verzeichnisse vor Whisper-Aufrufen automatisch.
 - CUDA- und Whisper-Fehler werden mit der echten Backend-Exception angezeigt.
 - Ein separates Logfile ist bewusst nicht vorgesehen; die Oberfläche bleibt die primäre Rückmeldung.
-- Die aktuelle Testsuite umfasst 10 Tests und wurde im Workspace verifiziert.
+- Der Sprecher-Editor in der GUI ermöglicht aktuell Anzeige, Umbenennung und Zusammenführung erkannter Sprecher.
+- Die aktuelle Testsuite umfasst aktuell 26 Tests und wurde im Workspace verifiziert.
 
 ## Bekannte offene Punkte
 
-- Sprecher-UX ist noch offen und soll konzeptionell und technisch weiter ausgearbeitet werden.
+- Sprecher-UX ist als MVP umgesetzt (Anzeige, Umbenennung, Zusammenführen); ein möglicher nächster Schritt ist Feingranularität auf Segmentebene.
 - Die heuristische Sprecher-Diarisierung ist noch nicht fachlich abschließend bewertet.
 - Eine mögliche Erweiterung ist ein optionales Debug-Log für Supportfälle.
 - Weitere mögliche Ausbauschritte sind Session-Historie, Modellverwaltung und zusätzliche Exportformate.
