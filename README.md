@@ -15,6 +15,7 @@ Windows-Desktop-App zum Aufnehmen, Verbessern, Abspielen und Transkribieren von 
   - manuell oder automatisch vor der Transkription
 - Lokale Whisper-Transkription ohne Cloud-Abhängigkeit
 - Optionale heuristische Sprecher-Unterscheidung im Transkript
+- Sprecher-Editor im UI (Sprecher umbenennen und zusammenführen)
 - Export als TXT und DOCX
 - Speichern von Rohaufnahme, verbesserter Aufnahme und Transkript pro Session
 
@@ -51,7 +52,8 @@ python main.py
 7. Optional manuell verbessern oder die automatische Verbesserung nutzen
 8. Optional Sprecher-Unterscheidung aktivieren
 9. Transkribieren
-10. Als DOCX exportieren oder alles speichern
+10. Optional Sprecher im Editor umbenennen/zusammenführen und Text manuell korrigieren
+11. Als DOCX exportieren oder alles speichern
 
 ## Speicherort der Ergebnisse
 
@@ -98,6 +100,6 @@ python -m unittest discover -s tests -v
 - GUI-basierter Workflow ohne externe API
 - Datei- und sessionbasiertes Speichern
 - CUDA-Diagnose und CUDA-DLL-Registrierung unter Windows vorhanden
-- Sprecher-UX und die Bewertung der heuristischen Diarisierung sind weiterhin ein offener Ausbaubereich
+- Sprecher-Editor im UI ist als MVP umgesetzt; die fachliche Bewertung der heuristischen Diarisierung bleibt ein offener Ausbaubereich
 
 

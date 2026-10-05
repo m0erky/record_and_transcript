@@ -2,12 +2,12 @@
 
 ## Aktuelle Prioritäten
 
-- [ ] Sprecher-UX im UI festlegen und umsetzen
+- [x] Sprecher-UX-MVP im UI umgesetzt
 
-  - Anzeige der Sprecher
+  - Anzeige erkannter Sprecher
   - Umbenennung
   - Zusammenführen
-  - manuelle Korrektur
+  - manuelle Korrektur über editierbares Transkriptfeld
 - [ ] Heuristische Sprecher-Diarisierung fachlich bewerten und dokumentieren
 - [ ] GUI-Refactor weiter auf kleinere, testbare Bereiche aufteilen
 
@@ -55,7 +55,7 @@
 - Die GUI ist funktionsfähig und die Kernpfade sind durch Tests abgesichert.
 - CUDA-Diagnose basiert auf GPU-Erkennung, PATH-Hinweisen und einem echten Modelltest.
 - Unter Windows registriert der Transcriber CUDA-DLL-Verzeichnisse vor Whisper-Aufrufen.
-- Die aktuelle Testsuite umfasst 20 Tests.
+- Die aktuelle Testsuite umfasst aktuell 26 Tests.
 
 
 

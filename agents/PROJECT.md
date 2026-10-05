@@ -22,6 +22,7 @@ Die Kernverarbeitung bleibt lokal auf dem Rechner des Nutzers. Für die Hauptfun
 - `app/gui.py` enthält Hauptfenster, Bedienlogik und Zustandssteuerung.
 - `app/waveform.py` zeichnet die Wellenform und die Abspielposition.
 - `app/widgets.py` bündelt kleine UI-Hilfen.
+- `app/speaker_editor.py` kapselt Sprecher-Operationen (Namen ermitteln, Umbenennen, Zusammenführen, Textformatierung).
 
 ### Fachlogik
 - `core/audio_recorder.py` nimmt Mikrofon- und optional System-Audio auf.
@@ -91,11 +92,12 @@ Wichtige Dataclasses im Projekt sind:
 - Unter Windows registriert der Transcriber CUDA-DLL-Verzeichnisse vor Whisper-Aufrufen automatisch.
 - CUDA- und Whisper-Fehler werden mit der echten Backend-Exception angezeigt.
 - Ein separates Logfile ist bewusst nicht vorgesehen; die Oberfläche bleibt die primäre Rückmeldung.
-- Die aktuelle Testsuite umfasst 20 Tests und wurde im Workspace verifiziert.
+- Der Sprecher-Editor in der GUI ermöglicht aktuell Anzeige, Umbenennung und Zusammenführung erkannter Sprecher.
+- Die aktuelle Testsuite umfasst aktuell 26 Tests und wurde im Workspace verifiziert.
 
 ## Bekannte offene Punkte
 
-- Sprecher-UX ist noch offen und soll konzeptionell und technisch weiter ausgearbeitet werden.
+- Sprecher-UX ist als MVP umgesetzt (Anzeige, Umbenennung, Zusammenführen); ein möglicher nächster Schritt ist Feingranularität auf Segmentebene.
 - Die heuristische Sprecher-Diarisierung ist noch nicht fachlich abschließend bewertet.
 - Eine mögliche Erweiterung ist ein optionales Debug-Log für Supportfälle.
 - Weitere mögliche Ausbauschritte sind Session-Historie, Modellverwaltung und zusätzliche Exportformate.

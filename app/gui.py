@@ -14,8 +14,14 @@ from typing import Any, Callable
 import customtkinter as ctk
 import numpy as np
 
+from app.backends.base import TranscriptSegment, TranscriptionResult
 from app.backends.factory import BackendFactory
-
+from app.speaker_editor import (
+    compose_transcript_text_from_segments,
+    merge_speakers_in_segments,
+    rename_speaker_in_segments,
+    speaker_names_from_segments,
+)
 from app.settings import AppSettings, load_settings, save_settings
 
 from app.waveform import WaveformCanvas
@@ -93,6 +99,7 @@ class AudioTranscriptionApp(ctk.CTk):
 
         self.enhanced_audio: np.ndarray | None = None
         self.transcript_text = ""
+        self.transcript_segments: list[TranscriptSegment] = []
         self.enhancement_steps: list[str] = []
 
         self._worker: threading.Thread | None = None
@@ -549,8 +556,74 @@ class AudioTranscriptionApp(ctk.CTk):
         self.textbox = ctk.CTkTextbox(self, wrap="word")
         self.textbox.grid(row=6, column=0, padx=20, pady=(0, 10), sticky="nsew")
 
+        speaker_frame = ctk.CTkFrame(self)
+        speaker_frame.grid(row=7, column=0, padx=20, pady=(0, 10), sticky="ew")
+        speaker_frame.grid_columnconfigure(5, weight=1)
+
+        speaker_title = ctk.CTkLabel(
+            speaker_frame,
+            text="Sprecher bearbeiten",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        speaker_title.grid(row=0, column=0, padx=12, pady=(12, 4), sticky="w")
+
+        self.speaker_info_label = ctk.CTkLabel(
+            speaker_frame,
+            text="Keine Sprecherdaten vorhanden.",
+            text_color="gray",
+        )
+        self.speaker_info_label.grid(row=0, column=1, columnspan=5, padx=12, pady=(12, 4), sticky="w")
+
+        source_label = ctk.CTkLabel(speaker_frame, text="Sprecher:")
+        source_label.grid(row=1, column=0, padx=(12, 6), pady=(4, 12), sticky="w")
+
+        self.speaker_source_menu = ctk.CTkOptionMenu(
+            speaker_frame,
+            values=["Keine Sprecher"],
+            command=self._on_speaker_source_selected,
+            width=170,
+            state="disabled",
+        )
+        self.speaker_source_menu.set("Keine Sprecher")
+        self.speaker_source_menu.grid(row=1, column=1, padx=(0, 8), pady=(4, 12), sticky="w")
+
+        self.speaker_name_entry = ctk.CTkEntry(
+            speaker_frame,
+            placeholder_text="Neuer Name",
+            width=180,
+            state="disabled",
+        )
+        self.speaker_name_entry.grid(row=1, column=2, padx=8, pady=(4, 12), sticky="w")
+
+        self.rename_speaker_button = ctk.CTkButton(
+            speaker_frame,
+            text="Umbenennen",
+            command=self._rename_selected_speaker,
+            width=120,
+            state="disabled",
+        )
+        self.rename_speaker_button.grid(row=1, column=3, padx=8, pady=(4, 12), sticky="w")
+
+        self.speaker_target_menu = ctk.CTkOptionMenu(
+            speaker_frame,
+            values=["Keine Ziele"],
+            width=170,
+            state="disabled",
+        )
+        self.speaker_target_menu.set("Keine Ziele")
+        self.speaker_target_menu.grid(row=1, column=4, padx=8, pady=(4, 12), sticky="w")
+
+        self.merge_speaker_button = ctk.CTkButton(
+            speaker_frame,
+            text="Zusammenführen",
+            command=self._merge_selected_speaker,
+            width=140,
+            state="disabled",
+        )
+        self.merge_speaker_button.grid(row=1, column=5, padx=(8, 12), pady=(4, 12), sticky="w")
+
         save_frame = ctk.CTkFrame(self)
-        save_frame.grid(row=7, column=0, padx=20, pady=(0, 20), sticky="ew")
+        save_frame.grid(row=8, column=0, padx=20, pady=(0, 20), sticky="ew")
 
         ctk.CTkButton(
             save_frame,
@@ -582,6 +655,7 @@ class AudioTranscriptionApp(ctk.CTk):
         ).pack(side="left", padx=12, pady=12)
 
         self._refresh_backend_dependent_controls()
+        self._refresh_speaker_editor_controls()
 
 
     def _set_loopback_enabled(self, enabled: bool) -> None:
@@ -736,6 +810,106 @@ class AudioTranscriptionApp(ctk.CTk):
     def _toggle_speaker_diarization(self) -> None:
         self._set_speaker_controls_enabled(self._speaker_diarization_enabled())
 
+    def _set_speaker_editor_enabled(self, enabled: bool) -> None:
+        state = "normal" if enabled else "disabled"
+        self.speaker_source_menu.configure(state=state)
+        self.speaker_name_entry.configure(state=state)
+        self.rename_speaker_button.configure(state=state)
+        self.speaker_target_menu.configure(state=state)
+        self.merge_speaker_button.configure(state=state)
+
+    def _on_speaker_source_selected(self, _value: str) -> None:
+        self._refresh_merge_target_options()
+
+    def _refresh_merge_target_options(self) -> None:
+        names = speaker_names_from_segments(self.transcript_segments)
+        source = self.speaker_source_menu.get()
+        target_values = [name for name in names if name != source]
+        if not target_values:
+            self.speaker_target_menu.configure(values=["Kein Ziel verfügbar"], state="disabled")
+            self.speaker_target_menu.set("Kein Ziel verfügbar")
+            self.merge_speaker_button.configure(state="disabled")
+            return
+        self.speaker_target_menu.configure(values=target_values, state="normal")
+        if self.speaker_target_menu.get() not in target_values:
+            self.speaker_target_menu.set(target_values[0])
+        self.merge_speaker_button.configure(state="normal")
+
+    def _refresh_speaker_editor_controls(self) -> None:
+        names = speaker_names_from_segments(self.transcript_segments)
+        if not names:
+            self.speaker_info_label.configure(text="Keine Sprecherdaten vorhanden.", text_color="gray")
+            self.speaker_source_menu.configure(values=["Keine Sprecher"], state="disabled")
+            self.speaker_source_menu.set("Keine Sprecher")
+            self.speaker_name_entry.delete(0, "end")
+            self.speaker_name_entry.configure(state="disabled")
+            self.rename_speaker_button.configure(state="disabled")
+            self.speaker_target_menu.configure(values=["Keine Ziele"], state="disabled")
+            self.speaker_target_menu.set("Keine Ziele")
+            self.merge_speaker_button.configure(state="disabled")
+            return
+        self.speaker_info_label.configure(
+            text=f"Gefundene Sprecher: {', '.join(names)}",
+            text_color=("gray10", "gray90"),
+        )
+        self.speaker_source_menu.configure(values=names, state="normal")
+        if self.speaker_source_menu.get() not in names:
+            self.speaker_source_menu.set(names[0])
+        self.speaker_name_entry.configure(state="normal")
+        self.rename_speaker_button.configure(state="normal")
+        self._refresh_merge_target_options()
+
+    def _update_transcript_from_segments(self) -> None:
+        self.transcript_text = compose_transcript_text_from_segments(self.transcript_segments)
+        self.textbox.delete("1.0", "end")
+        self.textbox.insert("1.0", self.transcript_text)
+
+    def _rename_selected_speaker(self) -> None:
+        old_name = self.speaker_source_menu.get().strip()
+        new_name = self.speaker_name_entry.get().strip()
+        if not old_name or old_name == "Keine Sprecher":
+            return
+        if not new_name:
+            messagebox.showwarning("Hinweis", "Bitte einen neuen Namen eingeben.")
+            return
+        if new_name == old_name:
+            messagebox.showwarning("Hinweis", "Der neue Name ist identisch mit dem aktuellen Namen.")
+            return
+        existing = set(speaker_names_from_segments(self.transcript_segments))
+        if new_name in existing:
+            merge_confirmed = messagebox.askyesno(
+                "Sprecher zusammenführen",
+                f"'{new_name}' existiert bereits. Soll '{old_name}' in '{new_name}' zusammengeführt werden?",
+            )
+            if not merge_confirmed:
+                return
+        self.transcript_segments = rename_speaker_in_segments(
+            self.transcript_segments,
+            old_name=old_name,
+            new_name=new_name,
+        )
+        self.speaker_name_entry.delete(0, "end")
+        self._update_transcript_from_segments()
+        self._refresh_speaker_editor_controls()
+        self._set_status(f"Sprecher umbenannt: {old_name} → {new_name}")
+
+    def _merge_selected_speaker(self) -> None:
+        source_name = self.speaker_source_menu.get().strip()
+        target_name = self.speaker_target_menu.get().strip()
+        if not source_name or not target_name:
+            return
+        if source_name == target_name:
+            messagebox.showwarning("Hinweis", "Bitte unterschiedliche Sprecher auswählen.")
+            return
+        self.transcript_segments = merge_speakers_in_segments(
+            self.transcript_segments,
+            source_name=source_name,
+            target_name=target_name,
+        )
+        self._update_transcript_from_segments()
+        self._refresh_speaker_editor_controls()
+        self._set_status(f"Sprecher zusammengeführt: {source_name} → {target_name}")
+
     def _toggle_system_audio(self) -> None:
         enabled = bool(self.chk_system_audio.get())
 
@@ -886,12 +1060,20 @@ class AudioTranscriptionApp(ctk.CTk):
             self.model_menu.set(model_values[0])
         execution_values = self.transcriber.available_execution_modes()
         backend_supports_gpu = type(self.transcriber).supports_gpu()
+        backend_supports_diarization = type(self.transcriber).supports_diarization()
         if execution_values:
             self.execution_menu.configure(values=execution_values)
             if self.execution_menu.get() not in execution_values:
                 self.execution_menu.set(execution_values[0])
         state = "normal" if backend_supports_gpu else "disabled"
         self.cuda_diagnostic_button.configure(state=state)
+        speaker_state = "normal" if backend_supports_diarization else "disabled"
+        self.chk_speaker_diarization.configure(state=speaker_state)
+        if not backend_supports_diarization:
+            self.chk_speaker_diarization.deselect()
+            self._set_speaker_controls_enabled(False)
+        else:
+            self._set_speaker_controls_enabled(self._speaker_diarization_enabled())
         self._update_azure_config_visibility()
         self._update_whispercpp_config_visibility()
 
@@ -975,11 +1157,13 @@ class AudioTranscriptionApp(ctk.CTk):
 
         self.enhanced_audio = None
         self.transcript_text = ""
+        self.transcript_segments = []
         self.enhancement_steps = []
         self._source_audio_path = None
         self.enhance_info.configure(text="Noch keine Verbesserung angewendet.")
         self.textbox.delete("1.0", "end")
         self.progress.set(0)
+        self._refresh_speaker_editor_controls()
         if reset_preview_source:
             self.preview_source_menu.set("Aufnahme")
 
@@ -1042,6 +1226,11 @@ class AudioTranscriptionApp(ctk.CTk):
                 self.chk_high_pass,
                 self.chk_noise_reduce,
                 self.chk_auto_enhance,
+                self.speaker_source_menu,
+                self.speaker_name_entry,
+                self.rename_speaker_button,
+                self.speaker_target_menu,
+                self.merge_speaker_button,
             ],
             state,
         )
@@ -1049,12 +1238,14 @@ class AudioTranscriptionApp(ctk.CTk):
         if busy:
             self.pause_record_button.configure(state="disabled")
             self._set_speaker_controls_enabled(False)
+            self._set_speaker_editor_enabled(False)
             return
 
         self._sync_recording_controls()
         self._set_speaker_controls_enabled(
             self._speaker_diarization_enabled() and not self.recorder.is_recording
         )
+        self._refresh_speaker_editor_controls()
 
 
 
@@ -1280,19 +1471,24 @@ class AudioTranscriptionApp(ctk.CTk):
                 self.after(0, lambda message=error_message: self._on_transcribe_error(message))
                 return
 
-            self.after(0, lambda: self._on_transcribe_done(result.text))
+            self.after(0, lambda: self._on_transcribe_done(result))
 
         self._start_worker(work)
 
 
-    def _on_transcribe_done(self, text: str) -> None:
+    def _on_transcribe_done(self, result: TranscriptionResult) -> None:
         self._worker = None
-        self.transcript_text = text
+        self.transcript_segments = list(result.segments)
+        if self.transcript_segments:
+            self.transcript_text = compose_transcript_text_from_segments(self.transcript_segments)
+        else:
+            self.transcript_text = result.text
 
         self.textbox.delete("1.0", "end")
-        self.textbox.insert("1.0", text)
+        self.textbox.insert("1.0", self.transcript_text)
         self.progress.set(1.0)
         self._set_busy(False)
+        self._refresh_speaker_editor_controls()
         self._set_status("Transkription abgeschlossen")
 
     def _on_transcribe_error(self, message: str) -> None:
@@ -1388,8 +1584,12 @@ class AudioTranscriptionApp(ctk.CTk):
         self.storage.save_wav(Path(path), self.enhanced_audio, SAMPLE_RATE)
         messagebox.showinfo("Gespeichert", f"Verbesserte Aufnahme gespeichert:\n{path}")
 
+    def _current_transcript_text(self) -> str:
+        return self.textbox.get("1.0", "end").strip()
+
     def _export_docx(self) -> None:
-        if not self.transcript_text.strip():
+        transcript = self._current_transcript_text()
+        if not transcript:
             messagebox.showwarning("Hinweis", "Kein Transkript zum Exportieren vorhanden.")
             return
 
@@ -1401,8 +1601,9 @@ class AudioTranscriptionApp(ctk.CTk):
         if not path:
             return
 
+        self.transcript_text = transcript
         export_to_docx(
-            text=self.transcript_text,
+            text=transcript,
             output_path=Path(path),
             title=default_title(),
             metadata=self._build_metadata(),
@@ -1413,14 +1614,16 @@ class AudioTranscriptionApp(ctk.CTk):
         if self.raw_audio.size == 0:
             messagebox.showwarning("Hinweis", "Keine Aufnahme vorhanden.")
             return
-        if not self.transcript_text.strip():
+        transcript = self._current_transcript_text()
+        if not transcript:
             messagebox.showwarning("Hinweis", "Kein Transkript vorhanden.")
             return
 
+        self.transcript_text = transcript
         session = self.storage.save_all(
             raw_audio=self.raw_audio,
             enhanced_audio=self.enhanced_audio,
-            transcript=self.transcript_text,
+            transcript=transcript,
             sample_rate=SAMPLE_RATE,
             metadata=self._build_metadata(),
         )
