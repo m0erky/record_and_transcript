@@ -1,5 +1,15 @@
 # CHANGELOG.md
 
+## 2026-10-05
+
+### Sprecher-UX-MVP im UI
+
+- In `app/gui.py` wurde ein Sprecher-Editor ergänzt, der erkannte Sprecher direkt im UI anzeigt.
+- Sprecher können umbenannt oder zusammengeführt werden; die Änderungen aktualisieren das Transkript sofort.
+- Für manuelle Korrekturen wird beim Export/Speichern der aktuelle Inhalt des editierbaren Transkriptfelds übernommen.
+- Die Verarbeitung der Sprecher-Operationen wurde in `app/speaker_editor.py` zentralisiert.
+- Neue Tests in `tests/test_speaker_editor.py` prüfen Sprecherliste, Umbenennung, Zusammenführung und Textformatierung.
+
 ## 2026-07-21
 
 ### Modularisierung und Backend-Konfiguration
