@@ -76,6 +76,7 @@ transcript.docx
 - Wenn der CUDA-Modus trotz erkannter GPU scheitert, hilft oft ein Neustart der App, damit Laufzeit-DLLs sauber registriert werden.
 - Fehlerdialoge zeigen die konkrete Whisper-/CUDA-Exception an.
 - Es gibt bewusst kein separates Logfile; Laufzeitmeldungen bleiben in der GUI.
+- Gewählte Backend- und Backend-Optionen werden pro Benutzer in `%USERPROFILE%\\.audio_transcription_settings.json` gespeichert.
 - Sprecher-Unterscheidung ist aktuell heuristisch und lokal; sie eignet sich für einfache Zuordnung, ist aber nicht so präzise wie spezialisierte Diarisierung.
 - System-Audio funktioniert unter Windows über WASAPI-Loopback. Wähle dafür das Ausgabegerät, über das der Ton tatsächlich läuft.
 

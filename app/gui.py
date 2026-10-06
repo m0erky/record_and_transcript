@@ -1404,9 +1404,9 @@ class AudioTranscriptionApp(ctk.CTk):
         self._set_status("Fehler bei Audio-Verbesserung")
         messagebox.showerror("Fehler", message)
 
-    def _audio_for_transcription(self) -> np.ndarray:
+    def _audio_for_transcription(self) -> tuple[np.ndarray, str | None]:
         if self.enhanced_audio is not None:
-            return self.enhanced_audio
+            return self.enhanced_audio, None
 
         if bool(self.chk_auto_enhance.get()):
             options = self._enhancement_options()
@@ -1419,13 +1419,9 @@ class AudioTranscriptionApp(ctk.CTk):
                     ) from exc
                 self.enhanced_audio = result.audio
                 self.enhancement_steps = result.applied_steps
-                self.enhance_info.configure(
-                    text="Automatisch angewendet: " + ", ".join(result.applied_steps),
-                    text_color=("gray10", "gray90"),
-                )
-                return result.audio
+                return result.audio, "Automatisch angewendet: " + ", ".join(result.applied_steps)
 
-        return self.raw_audio
+        return self.raw_audio, None
 
     def _start_transcription(self) -> None:
 
@@ -1455,7 +1451,7 @@ class AudioTranscriptionApp(ctk.CTk):
 
         def work() -> None:
             try:
-                audio = self._audio_for_transcription()
+                audio, auto_enhance_info = self._audio_for_transcription()
                 result = self.transcriber.transcribe(
                     audio=audio,
                     sample_rate=SAMPLE_RATE,
@@ -1471,18 +1467,24 @@ class AudioTranscriptionApp(ctk.CTk):
                 self.after(0, lambda message=error_message: self._on_transcribe_error(message))
                 return
 
-            self.after(0, lambda: self._on_transcribe_done(result))
+            self.after(0, lambda: self._on_transcribe_done(result, auto_enhance_info))
 
         self._start_worker(work)
 
 
-    def _on_transcribe_done(self, result: TranscriptionResult) -> None:
+    def _on_transcribe_done(self, result: TranscriptionResult, auto_enhance_info: str | None = None) -> None:
         self._worker = None
         self.transcript_segments = list(result.segments)
         if self.transcript_segments:
             self.transcript_text = compose_transcript_text_from_segments(self.transcript_segments)
         else:
             self.transcript_text = result.text
+
+        if auto_enhance_info is not None:
+            self.enhance_info.configure(
+                text=auto_enhance_info,
+                text_color=("gray10", "gray90"),
+            )
 
         self.textbox.delete("1.0", "end")
         self.textbox.insert("1.0", self.transcript_text)
