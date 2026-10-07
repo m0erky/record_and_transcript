@@ -77,7 +77,7 @@ transcript.docx
 - Fehlerdialoge zeigen die konkrete Whisper-/CUDA-Exception an.
 - Es gibt bewusst kein separates Logfile; Laufzeitmeldungen bleiben in der GUI.
 - Gewählte Backend- und Backend-Optionen werden pro Benutzer in `%USERPROFILE%\\.audio_transcription_settings.json` gespeichert.
-- Sprecher-Unterscheidung ist aktuell heuristisch und lokal; sie eignet sich für einfache Zuordnung, ist aber nicht so präzise wie spezialisierte Diarisierung.
+- Sprecher-Unterscheidung ist heuristisch und lokal, nutzt jetzt aber segmentweise Konfidenzen plus Nachbarschafts-Glättung für stabilere Sprecherlabels.
 - System-Audio funktioniert unter Windows über WASAPI-Loopback. Wähle dafür das Ausgabegerät, über das der Ton tatsächlich läuft.
 
 ## Whisper.cpp-Backend
@@ -101,6 +101,6 @@ python -m unittest discover -s tests -v
 - GUI-basierter Workflow ohne externe API
 - Datei- und sessionbasiertes Speichern
 - CUDA-Diagnose und CUDA-DLL-Registrierung unter Windows vorhanden
-- Sprecher-Editor im UI ist als MVP umgesetzt; die fachliche Bewertung der heuristischen Diarisierung bleibt ein offener Ausbaubereich
+- Sprecher-Editor im UI ist vorhanden; zusätzlich zeigt die Sprecherzeile jetzt eine Diarisierungs-Zuverlässigkeit je Sprecher (in %)
 
 

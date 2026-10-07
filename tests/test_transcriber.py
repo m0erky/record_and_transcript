@@ -66,12 +66,16 @@ class FasterWhisperBackendTests(unittest.TestCase):
         )
 
         self.assertEqual([segment.speaker for segment in labeled], ["Sprecher 1", "Sprecher 2", "Sprecher 2"])
+        self.assertTrue(all(segment.speaker_confidence is not None for segment in labeled))
+        for segment in labeled:
+            self.assertGreaterEqual(segment.speaker_confidence or 0.0, 0.0)
+            self.assertLessEqual(segment.speaker_confidence or 0.0, 1.0)
 
     def test_merge_adjacent_segments_combines_same_speaker(self) -> None:
         segments = [
-            TranscriptSegment(0.0, 1.0, "Hallo", "Sprecher 1"),
-            TranscriptSegment(1.2, 2.0, "Welt", "Sprecher 1"),
-            TranscriptSegment(2.5, 3.0, "Anderer", "Sprecher 2"),
+            TranscriptSegment(0.0, 1.0, "Hallo", "Sprecher 1", 0.8),
+            TranscriptSegment(1.2, 2.0, "Welt", "Sprecher 1", 0.5),
+            TranscriptSegment(2.5, 3.0, "Anderer", "Sprecher 2", 0.9),
         ]
 
         merged = self.transcriber._merge_adjacent_segments(segments, max_gap_seconds=0.5)
@@ -79,7 +83,9 @@ class FasterWhisperBackendTests(unittest.TestCase):
         self.assertEqual(len(merged), 2)
         self.assertEqual(merged[0].text, "Hallo Welt")
         self.assertEqual(merged[0].speaker, "Sprecher 1")
+        self.assertAlmostEqual(merged[0].speaker_confidence or 0.0, 0.6666666667, places=5)
         self.assertEqual(merged[1].speaker, "Sprecher 2")
+        self.assertAlmostEqual(merged[1].speaker_confidence or 0.0, 0.9, places=5)
 
     def test_ensure_model_raises_when_cuda_model_load_fails(self) -> None:
         def fake_whisper_model(*_args, **kwargs):

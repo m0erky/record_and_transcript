@@ -33,6 +33,7 @@ def rename_speaker_in_segments(
                 end=segment.end,
                 text=segment.text,
                 speaker=speaker,
+                speaker_confidence=segment.speaker_confidence,
             )
         )
     return renamed
