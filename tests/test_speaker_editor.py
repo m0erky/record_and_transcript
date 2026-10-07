@@ -56,6 +56,22 @@ class SpeakerEditorTests(unittest.TestCase):
 
         self.assertEqual([segment.speaker for segment in merged], ["Sprecher 1", "Sprecher 1", "Sprecher 1"])
 
+    def test_rename_preserves_speaker_confidence(self) -> None:
+        segments = [TranscriptSegment(0.0, 1.0, "A", "Sprecher 1", 0.78)]
+
+        renamed = rename_speaker_in_segments(segments, old_name="Sprecher 1", new_name="Host")
+
+        self.assertEqual(renamed[0].speaker, "Host")
+        self.assertAlmostEqual(renamed[0].speaker_confidence or 0.0, 0.78, places=5)
+
+    def test_merge_preserves_speaker_confidence(self) -> None:
+        segments = [TranscriptSegment(0.0, 1.0, "A", "Sprecher 2", 0.64)]
+
+        merged = merge_speakers_in_segments(segments, source_name="Sprecher 2", target_name="Sprecher 1")
+
+        self.assertEqual(merged[0].speaker, "Sprecher 1")
+        self.assertAlmostEqual(merged[0].speaker_confidence or 0.0, 0.64, places=5)
+
     def test_compose_transcript_text_with_speakers_includes_labels_and_timestamps(self) -> None:
         segments = [
             TranscriptSegment(0.0, 1.4, "Hallo", "Interviewer"),

@@ -278,17 +278,36 @@ class FasterWhisperBackend(TranscriptionBackend):
                 embeddings.append(emb)
                 valid_regions.append(region)
         if not valid_regions:
-            return [TranscriptSegment(s.start, s.end, s.text, "Sprecher 1") for s in segments]
-        labels = self._cluster_speakers(np.vstack(embeddings), max_speakers)
+            return [TranscriptSegment(s.start, s.end, s.text, "Sprecher 1", 0.5) for s in segments]
+
+        embedding_matrix = np.vstack(embeddings)
+        labels = self._cluster_speakers(embedding_matrix, max_speakers)
+        region_confidences = self._region_confidences(embedding_matrix, labels)
+
         speaker_order: dict[int, int] = {}
         for region, label in zip(valid_regions, labels):
             region.speaker_label = int(label)
             speaker_order.setdefault(region.speaker_label, len(speaker_order) + 1)
-        result: list[TranscriptSegment] = []
+
+        raw_assignments: list[tuple[int, float]] = []
         for segment in segments:
-            label = self._speaker_label_for_segment(segment, valid_regions)
+            raw_assignments.append(
+                self._assign_segment_label_with_confidence(segment, valid_regions, region_confidences)
+            )
+        smoothed_assignments = self._smooth_speaker_assignments(raw_assignments, segments)
+
+        result: list[TranscriptSegment] = []
+        for segment, (label, confidence) in zip(segments, smoothed_assignments):
             speaker_no = speaker_order.setdefault(label, len(speaker_order) + 1)
-            result.append(TranscriptSegment(segment.start, segment.end, segment.text, f"Sprecher {speaker_no}"))
+            result.append(
+                TranscriptSegment(
+                    segment.start,
+                    segment.end,
+                    segment.text,
+                    f"Sprecher {speaker_no}",
+                    confidence,
+                )
+            )
         return result
 
     def _detect_speech_regions(
@@ -344,25 +363,85 @@ class FasterWhisperBackend(TranscriptionBackend):
         filtered = [region for region in merged if (region.end - region.start) >= min_speech_duration]
         return filtered or [SpeechRegion(0.0, total_duration)]
 
-    def _speaker_label_for_segment(self, segment: TranscriptSegment, regions: list[SpeechRegion]) -> int:
-        best_label: int | None = None
-        best_overlap = float("-inf")
+    def _region_confidences(self, embeddings: np.ndarray, labels: np.ndarray) -> dict[int, float]:
+        unique_labels = sorted(set(int(label) for label in labels))
+        centroids: dict[int, np.ndarray] = {}
+        for label in unique_labels:
+            cluster_embeddings = embeddings[labels == label]
+            centroid = cluster_embeddings.mean(axis=0)
+            centroid_norm = float(np.linalg.norm(centroid))
+            centroids[label] = centroid / centroid_norm if centroid_norm > 1e-6 else centroid
+
+        confidences: dict[int, float] = {}
+        for index, label_value in enumerate(labels):
+            label = int(label_value)
+            emb = embeddings[index]
+            emb_norm = float(np.linalg.norm(emb))
+            emb = emb / emb_norm if emb_norm > 1e-6 else emb
+            own_similarity = float(np.dot(emb, centroids[label]))
+            other_similarities = [float(np.dot(emb, centroids[lbl])) for lbl in unique_labels if lbl != label]
+            best_other = max(other_similarities) if other_similarities else -1.0
+            margin = max(0.0, own_similarity - best_other)
+            confidence = float(np.clip(0.65 * ((own_similarity + 1.0) * 0.5) + 0.35 * margin, 0.0, 1.0))
+            confidences[index] = confidence
+        return confidences
+
+    def _assign_segment_label_with_confidence(
+        self,
+        segment: TranscriptSegment,
+        regions: list[SpeechRegion],
+        region_confidences: dict[int, float],
+    ) -> tuple[int, float]:
+        label_scores: dict[int, float] = {}
+        label_weights: dict[int, float] = {}
         nearest_label = 1
         nearest_distance = float("inf")
         midpoint = (segment.start + segment.end) * 0.5
-        for region in regions:
+
+        for index, region in enumerate(regions):
             label = region.speaker_label or 1
-            overlap = min(segment.end, region.end) - max(segment.start, region.start)
-            if overlap > best_overlap:
-                best_overlap = overlap
-                if overlap > 0:
-                    best_label = label
+            overlap = max(0.0, min(segment.end, region.end) - max(segment.start, region.start))
+            region_confidence = region_confidences.get(index, 0.5)
+            if overlap > 0:
+                score = overlap * max(0.25, region_confidence)
+                label_scores[label] = label_scores.get(label, 0.0) + score
+                label_weights[label] = label_weights.get(label, 0.0) + overlap
             region_midpoint = (region.start + region.end) * 0.5
-            distance = min(abs(segment.start - region.end), abs(segment.end - region.start), abs(midpoint - region_midpoint))
+            distance = min(
+                abs(segment.start - region.end),
+                abs(segment.end - region.start),
+                abs(midpoint - region_midpoint),
+            )
             if distance < nearest_distance:
                 nearest_distance = distance
                 nearest_label = label
-        return best_label if best_label is not None else nearest_label
+
+        if label_scores:
+            label = max(label_scores.items(), key=lambda item: item[1])[0]
+            avg_confidence = label_scores[label] / max(label_weights.get(label, 1.0), 1e-6)
+            return label, float(np.clip(avg_confidence, 0.0, 1.0))
+
+        fallback_confidence = max(0.3, 1.0 - min(nearest_distance / 4.0, 0.7))
+        return nearest_label, float(np.clip(fallback_confidence, 0.0, 1.0))
+
+    def _smooth_speaker_assignments(
+        self,
+        assignments: list[tuple[int, float]],
+        segments: list[TranscriptSegment],
+    ) -> list[tuple[int, float]]:
+        if len(assignments) < 3:
+            return assignments
+        smoothed = assignments[:]
+        for index in range(1, len(assignments) - 1):
+            prev_label, prev_conf = smoothed[index - 1]
+            curr_label, curr_conf = smoothed[index]
+            next_label, next_conf = smoothed[index + 1]
+            duration = max(0.0, segments[index].end - segments[index].start)
+            if prev_label == next_label and curr_label != prev_label:
+                if curr_conf < 0.62 or duration <= 1.1:
+                    blended_conf = max(curr_conf, min(1.0, (prev_conf + next_conf) * 0.5))
+                    smoothed[index] = (prev_label, blended_conf)
+        return smoothed
 
     def _segment_embedding(self, audio: np.ndarray, sample_rate: int, start_seconds: float, end_seconds: float) -> np.ndarray | None:
         start_index = max(0, int(start_seconds * sample_rate))
@@ -470,15 +549,55 @@ class FasterWhisperBackend(TranscriptionBackend):
     def _merge_adjacent_segments(self, segments: list[TranscriptSegment], max_gap_seconds: float = 1.0) -> list[TranscriptSegment]:
         if not segments:
             return []
-        merged = [TranscriptSegment(segments[0].start, segments[0].end, segments[0].text, segments[0].speaker)]
+        merged = [
+            TranscriptSegment(
+                segments[0].start,
+                segments[0].end,
+                segments[0].text,
+                segments[0].speaker,
+                segments[0].speaker_confidence,
+            )
+        ]
         for segment in segments[1:]:
             previous = merged[-1]
             if previous.speaker == segment.speaker and segment.start - previous.end <= max_gap_seconds:
+                prev_duration = max(0.0, previous.end - previous.start)
+                next_duration = max(0.0, segment.end - segment.start)
+                previous.speaker_confidence = self._merge_confidence(
+                    previous.speaker_confidence,
+                    segment.speaker_confidence,
+                    prev_duration,
+                    next_duration,
+                )
                 previous.end = max(previous.end, segment.end)
                 previous.text = f"{previous.text} {segment.text}".strip()
             else:
-                merged.append(TranscriptSegment(segment.start, segment.end, segment.text, segment.speaker))
+                merged.append(
+                    TranscriptSegment(
+                        segment.start,
+                        segment.end,
+                        segment.text,
+                        segment.speaker,
+                        segment.speaker_confidence,
+                    )
+                )
         return merged
+
+    def _merge_confidence(
+        self,
+        first: float | None,
+        second: float | None,
+        first_weight: float,
+        second_weight: float,
+    ) -> float | None:
+        if first is None and second is None:
+            return None
+        if first is None:
+            return second
+        if second is None:
+            return first
+        total_weight = max(1e-6, first_weight + second_weight)
+        return float(np.clip(((first * first_weight) + (second * second_weight)) / total_weight, 0.0, 1.0))
 
     def _format_speaker_text(self, segments: list[TranscriptSegment]) -> str:
         return "\n\n".join(

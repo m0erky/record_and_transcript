@@ -27,6 +27,7 @@ class TranscriptSegment:
     end: float
     text: str
     speaker: str | None = None
+    speaker_confidence: float | None = None
 
 
 @dataclass

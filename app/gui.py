@@ -848,8 +848,12 @@ class AudioTranscriptionApp(ctk.CTk):
             self.speaker_target_menu.set("Keine Ziele")
             self.merge_speaker_button.configure(state="disabled")
             return
+        speaker_summary = f"Gefundene Sprecher: {', '.join(names)}"
+        confidence_summary = self._speaker_confidence_summary()
+        if confidence_summary:
+            speaker_summary = f"{speaker_summary} · {confidence_summary}"
         self.speaker_info_label.configure(
-            text=f"Gefundene Sprecher: {', '.join(names)}",
+            text=speaker_summary,
             text_color=("gray10", "gray90"),
         )
         self.speaker_source_menu.configure(values=names, state="normal")
@@ -858,6 +862,28 @@ class AudioTranscriptionApp(ctk.CTk):
         self.speaker_name_entry.configure(state="normal")
         self.rename_speaker_button.configure(state="normal")
         self._refresh_merge_target_options()
+
+    def _speaker_confidence_summary(self) -> str | None:
+        confidence_by_speaker: dict[str, list[float]] = {}
+        for segment in self.transcript_segments:
+            if not segment.speaker or segment.speaker_confidence is None:
+                continue
+            confidence_by_speaker.setdefault(segment.speaker, []).append(segment.speaker_confidence)
+        if not confidence_by_speaker:
+            return None
+        parts: list[str] = []
+        all_values: list[float] = []
+        for speaker in speaker_names_from_segments(self.transcript_segments):
+            values = confidence_by_speaker.get(speaker)
+            if not values:
+                continue
+            avg = sum(values) / len(values)
+            all_values.extend(values)
+            parts.append(f"{speaker}: {int(round(avg * 100))}%")
+        if not all_values:
+            return None
+        total_avg = int(round((sum(all_values) / len(all_values)) * 100))
+        return f"Diarisierung: {' | '.join(parts)} (Ø {total_avg}%)"
 
     def _update_transcript_from_segments(self) -> None:
         self.transcript_text = compose_transcript_text_from_segments(self.transcript_segments)
