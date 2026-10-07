@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import Callable
 
 import numpy as np
@@ -20,6 +21,8 @@ class AudioPlayer:
         self._lock = threading.Lock()
         self._on_position_change: Callable[[float, float], None] | None = None
         self._on_finished: Callable[[], None] | None = None
+        self._position_notify_interval_seconds = 1.0 / 15.0
+        self._last_position_notify_monotonic = 0.0
 
     @property
     def duration(self) -> float:
@@ -55,7 +58,7 @@ class AudioPlayer:
         self.stop()
         self._audio = audio.astype(np.float32).copy()
         self._position = 0
-        self._notify_position()
+        self._notify_position(force=True)
 
     def play(self) -> None:
         if self._audio.size == 0:
@@ -90,7 +93,7 @@ class AudioPlayer:
             self._paused = False
             self._close_stream()
             self._position = 0
-            self._notify_position()
+            self._notify_position(force=True)
 
     def seek(self, seconds: float) -> None:
         if self._audio.size == 0:
@@ -105,7 +108,7 @@ class AudioPlayer:
 
         clamped = max(0.0, min(seconds, self.duration))
         self._position = int(clamped * self.sample_rate)
-        self._notify_position()
+        self._notify_position(force=True)
 
         if was_playing:
             self.play()
@@ -137,7 +140,7 @@ class AudioPlayer:
                 if chunk.size == 0:
                     outdata.fill(0)
                     self._playing = False
-                    self._notify_position()
+                    self._notify_position(force=True)
                     if self._on_finished:
                         self._on_finished()
                     raise sd.CallbackStop()
@@ -147,7 +150,7 @@ class AudioPlayer:
                     outdata[chunk.size :, 0] = 0
                     self._position = len(self._audio)
                     self._playing = False
-                    self._notify_position()
+                    self._notify_position(force=True)
                     if self._on_finished:
                         self._on_finished()
                     raise sd.CallbackStop()
@@ -164,6 +167,11 @@ class AudioPlayer:
         )
         self._stream.start()
 
-    def _notify_position(self) -> None:
-        if self._on_position_change:
-            self._on_position_change(self.position, self.duration)
+    def _notify_position(self, *, force: bool = False) -> None:
+        if not self._on_position_change:
+            return
+        now = time.monotonic()
+        if not force and (now - self._last_position_notify_monotonic) < self._position_notify_interval_seconds:
+            return
+        self._last_position_notify_monotonic = now
+        self._on_position_change(self.position, self.duration)
