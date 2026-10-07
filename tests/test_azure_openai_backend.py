@@ -41,8 +41,24 @@ class AzureOpenAIBackendTests(unittest.TestCase):
         self.assertIn("/openai/deployments/gpt-4o-transcribe/audio/transcriptions", called_args[0])
         self.assertIn("headers", called_kwargs)
         self.assertEqual(called_kwargs["headers"], {"api-key": "secret"})
+        self.assertIn("data", called_kwargs)
+        self.assertEqual(called_kwargs["data"]["response_format"], "json")
         self.assertIn("files", called_kwargs)
         self.assertIn("file", called_kwargs["files"])
+
+    @patch("app.backends.azure_openai_backend.requests.post")
+    def test_transcribe_returns_plain_text_when_json_payload_is_missing(self, mock_post: MagicMock) -> None:
+        backend = AzureOpenAIBackend(config=self.config)
+        response = MagicMock()
+        response.status_code = 200
+        response.text = "Nur Textantwort"
+        response.json.side_effect = ValueError("not json")
+        mock_post.return_value = response
+
+        result = backend.transcribe(audio=self.audio, language="de")
+
+        self.assertEqual(result.text, "Nur Textantwort")
+        self.assertEqual(result.language, "de")
 
     @patch("app.backends.azure_openai_backend.requests.post")
     def test_transcribe_raises_when_status_not_ok(self, mock_post: MagicMock) -> None:

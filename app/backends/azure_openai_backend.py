@@ -71,11 +71,17 @@ class AzureOpenAIBackend(TranscriptionBackend):
         response = self._post_transcription(buffer, language, model_size, speaker_diarization)
         if on_progress:
             on_progress("Antwort von Azure OpenAI empfangen.")
-        payload = response.json()
-        text = payload.get("text") or payload.get("transcript") or ""
-        language_used = payload.get("language") or (language or "auto")
+        text: str
+        language_used = language or "auto"
+        try:
+            payload = response.json()
+        except ValueError:
+            text = response.text.strip()
+        else:
+            text = (payload.get("text") or payload.get("transcript") or "").strip()
+            language_used = payload.get("language") or language_used
         return TranscriptionResult(
-            text=text.strip(),
+            text=text,
             language=language_used,
             duration=len(audio) / sample_rate,
         )
@@ -124,7 +130,7 @@ class AzureOpenAIBackend(TranscriptionBackend):
         files = {"file": ("audio.wav", buffer, "audio/wav")}
         data: dict[str, str] = {
             "language": language or "de",
-            "response_format": "text",
+            "response_format": "json",
             "model": model_size,
         }
         if speaker_diarization:

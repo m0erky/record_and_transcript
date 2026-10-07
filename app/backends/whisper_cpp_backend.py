@@ -298,7 +298,7 @@ class WhisperCppBackend(TranscriptionBackend):
             if required:
                 available = sorted(child.name for child in output_dir.iterdir())
                 raise RuntimeError(
-                    "Keine Whisper.cpp-Ausgabedatei mit Endung '{suffix}' gefunden. "
+                    f"Keine Whisper.cpp-Ausgabedatei mit Endung '{suffix}' gefunden. "
                     f"Temp-Ordnermitglieder: {available}"
                 )
             return None
