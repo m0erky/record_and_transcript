@@ -78,6 +78,7 @@ transcript.docx
 - Es gibt bewusst kein separates Logfile; Laufzeitmeldungen bleiben in der GUI.
 - Gewählte Backend- und Backend-Optionen werden pro Benutzer in `%USERPROFILE%\\.audio_transcription_settings.json` gespeichert.
 - Sprecher-Unterscheidung ist heuristisch und lokal, nutzt jetzt aber segmentweise Konfidenzen plus Nachbarschafts-Glättung für stabilere Sprecherlabels.
+- Die Wellenform-Anzeige ist für große Dateien optimiert: vorab berechnete Hüllkurve, statisches Caching und gedrosselte Positionsupdates.
 - System-Audio funktioniert unter Windows über WASAPI-Loopback. Wähle dafür das Ausgabegerät, über das der Ton tatsächlich läuft.
 
 ## Whisper.cpp-Backend
